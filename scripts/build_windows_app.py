@@ -38,23 +38,20 @@ PLAYWRIGHT_TRIM_PATHS = [
     Path("_internal/playwright/driver/package/lib/vite"),
 ]
 
-README_TEXT = """Tongji Look Subtitles (Public Build)
+README_TEXT = """Look 回放字幕工具（公开版）
 
-Scope:
-1. Only for content the user's own Tongji Look account can already access.
-2. Only downloads replay videos the account can already play normally.
-3. Supports video download, Chinese subtitles, translated subtitles, and PotPlayer subtitle naming.
+这个版本给正常公开使用准备，只处理你自己的 Tongji Look 账号本来就能访问的回放内容。
 
-Usage:
-1. Double-click LookTongjiSubtitles.exe.
-2. Fill in account, password, and API key if needed.
-3. Paste a replay page URL, or use batch replay search.
-4. Click the corresponding button to generate video and subtitles.
+怎么用：
+1. 解压整个压缩包。
+2. 双击 LookTongjiSubtitles.exe。
+3. 填写账号信息，或者直接粘贴回放页面链接。
+4. 按界面提示下载视频并生成字幕。
 
-Notes:
-- Send the whole folder to users, not only the exe.
-- This public build does not include browser-assisted capture features.
-- Please follow school and platform rules.
+提醒：
+- 发送给别人时，请把整个文件夹一起发，不要只发 exe。
+- 这个公开版不带浏览器辅助抓取功能。
+- 使用时请遵守学校和平台规则。
 """
 
 
@@ -100,6 +97,14 @@ def copy_ffmpeg(dist_app: Path, *, bundle_ffmpeg: bool) -> None:
     target = dist_app / "tools" / "ffmpeg" / "bin"
     target.mkdir(parents=True, exist_ok=True)
     ffmpeg = shutil.which("ffmpeg")
+    try:
+        import imageio_ffmpeg  # type: ignore
+
+        bundled = imageio_ffmpeg.get_ffmpeg_exe()
+        if bundled and Path(bundled).exists():
+            ffmpeg = bundled
+    except Exception:
+        pass
     if not ffmpeg:
         print("[WARN] ffmpeg.exe was not found on this computer.")
         return
