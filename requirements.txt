@@ -1,0 +1,4 @@
+requests
+playwright
+python-dotenv
+Pillow

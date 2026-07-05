@@ -1,0 +1,13 @@
+.env
+.venv/
+venv/
+build/
+dist/
+state/
+.trash/
+tongji-output/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.spec
