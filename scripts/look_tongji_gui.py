@@ -49,20 +49,34 @@ LOG_PATH = LOG_DIR / "app.log"
 APP_VARIANT = os.environ.get("LOOK_TONGJI_APP_VARIANT", "public").strip().lower() or "public"
 SELFUSE_ENABLED = APP_VARIANT == "selfuse"
 APP_EXE_NAME = "LookTongjiSubtitlesSelfUse" if SELFUSE_ENABLED else "LookTongjiSubtitles"
-BG_COLOR = "#f4f7fb"
-PANEL_BG = "#ffffff"
-TEXT_COLOR = "#172033"
-MUTED_COLOR = "#5f6f89"
-ACCENT_COLOR = "#2563eb"
-ACCENT_DARK = "#1d4ed8"
-SUCCESS_COLOR = "#16a34a"
-ENTRY_BG = "#ffffff"
+BG_COLOR = "#f5f1ea"
+PANEL_BG = "#fffdfa"
+PANEL_ALT_BG = "#edf6f3"
+TEXT_COLOR = "#18212f"
+MUTED_COLOR = "#617080"
+ACCENT_COLOR = "#0f766e"
+ACCENT_DARK = "#115e59"
+ACCENT_SOFT = "#d8f1ec"
+SUCCESS_COLOR = "#2f855a"
+DANGER_COLOR = "#be123c"
+DANGER_SOFT = "#ffe4e6"
+BORDER_COLOR = "#d8d1c7"
+ENTRY_BG = "#fffdfa"
+ENTRY_BORDER = "#c9d4df"
+HERO_BG = "#102a43"
+HERO_EDGE = "#1f3f5b"
+HERO_FG = "#f8fafc"
+HERO_MUTED = "#c8d3dd"
 LOG_BG = "#0f172a"
 LOG_FG = "#dbeafe"
+NOTE_BG = "#edf7f4"
+NOTE_FG = "#215c59"
 UI_FONT = "{Microsoft YaHei UI} 10"
-UI_FONT_HERO = "{Microsoft YaHei UI} 18 bold"
-UI_FONT_SMALL = "{Microsoft YaHei UI} 10"
-UI_FONT_TAB = "{Microsoft YaHei UI} 10"
+UI_FONT_HERO = "{Microsoft YaHei UI} 20 bold"
+UI_FONT_SECTION = "{Microsoft YaHei UI} 11 bold"
+UI_FONT_SMALL = "{Microsoft YaHei UI} 9"
+UI_FONT_TAB = "{Microsoft YaHei UI} 10 bold"
+UI_FONT_BADGE = "{Microsoft YaHei UI} 9 bold"
 MONO_FONT = "Consolas 10"
 
 
@@ -149,8 +163,8 @@ TEXT = {
         "advanced": "高级选项",
         "show_advanced": "显示高级选项",
         "hide_advanced": "隐藏高级选项",
-        "simple_source": "第 1 步：粘贴课程回放链接",
-        "simple_source_hint": "通常只需要粘贴课程页面链接。下面的 course_id / sub_id 不懂可以不填。",
+        "simple_source": "第 1 步：粘贴课程页或 MP4 长链接",
+        "simple_source_hint": "可直接粘贴 Tongji 回放页面链接，或你已经获取到的 MP4 长链接。公开版不会帮你抓取长链接。",
         "existing_srt_hint": "如果你已经有中文字幕 SRT，可以直接选择它，然后跳过第 1 步。",
         "translation_methods": "第 2 步：选择翻译方式",
         "api_method_hint": "有 API Key：点自动翻译，最省事。",
@@ -158,7 +172,7 @@ TEXT = {
         "manual_return": "第 3 步：整理 AI 返回的字幕",
         "keep_default": "看不懂就保持默认。",
         "source": "课程 / 字幕来源",
-        "lecture_url": "课程回放链接",
+        "lecture_url": "课程页 / MP4 长链接",
         "source_srt": "原始 SRT",
         "pick_srt": "选择 SRT",
         "translated_srt": "AI 译回 SRT",
@@ -190,8 +204,8 @@ TEXT = {
         "pick_translated_title": "选择 AI 翻译回来的 SRT",
         "pick_output_title": "选择输出目录",
         "missing_source_title": "缺少来源",
-        "missing_source_body": "请填写课程回放链接，或填写 course_id / sub_id。",
-        "missing_source_or_srt": "请选择已有 SRT，或填写课程回放链接。",
+        "missing_source_body": "请填写课程页链接、MP4 长链接，或填写 course_id / sub_id。",
+        "missing_source_or_srt": "请选择已有 SRT，或填写课程页链接或 MP4 长链接。",
         "missing_source_srt_title": "缺少原始 SRT",
         "missing_source_srt_body": "请先选择原始中文字幕 SRT。",
         "missing_translation_title": "缺少译文 SRT",
@@ -209,6 +223,7 @@ TEXT = {
         "batch_course_keyword": "课程关键词",
         "batch_start_date": "开始日期",
         "batch_end_date": "结束日期",
+        "batch_date_hint": "日期格式示例：2026-03-01",
         "batch_weekday": "星期筛选",
         "batch_search_hint": "按“今日课程”批量搜索回放。星期可填 3 或 wed，3 表示周三。",
         "batch_search": "搜索回放",
@@ -269,8 +284,8 @@ TEXT = {
         "advanced": "Advanced options",
         "show_advanced": "Show advanced options",
         "hide_advanced": "Hide advanced options",
-        "simple_source": "Step 1: Paste the course replay link",
-        "simple_source_hint": "Usually you only need the course page link. Leave course_id / sub_id empty if unsure.",
+        "simple_source": "Step 1: Paste the replay page or MP4 URL",
+        "simple_source_hint": "You can paste either a Tongji replay page URL or an MP4 direct URL you already obtained. The public build does not capture direct URLs for you.",
         "existing_srt_hint": "Already have a Chinese SRT? Choose it here and skip Step 1.",
         "translation_methods": "Step 2: Choose a translation method",
         "api_method_hint": "With an API key: click automatic translation. This is the easiest path.",
@@ -278,7 +293,7 @@ TEXT = {
         "manual_return": "Step 3: Clean up the AI-returned subtitles",
         "keep_default": "If unsure, keep the default.",
         "source": "Course / Subtitle Source",
-        "lecture_url": "Replay URL",
+        "lecture_url": "Replay page / MP4 URL",
         "source_srt": "Source SRT",
         "pick_srt": "Choose SRT",
         "translated_srt": "AI SRT",
@@ -310,8 +325,8 @@ TEXT = {
         "pick_translated_title": "Choose AI-translated SRT",
         "pick_output_title": "Choose output folder",
         "missing_source_title": "Missing source",
-        "missing_source_body": "Enter a replay URL, or fill course_id / sub_id.",
-        "missing_source_or_srt": "Choose an existing SRT, or enter a replay URL.",
+        "missing_source_body": "Enter a replay page URL, an MP4 direct URL, or fill course_id / sub_id.",
+        "missing_source_or_srt": "Choose an existing SRT, or enter a replay page URL or MP4 direct URL.",
         "missing_source_srt_title": "Missing source SRT",
         "missing_source_srt_body": "Choose the original Chinese SRT first.",
         "missing_translation_title": "Missing translated SRT",
@@ -329,6 +344,7 @@ TEXT = {
         "batch_course_keyword": "Course keyword",
         "batch_start_date": "Start date",
         "batch_end_date": "End date",
+        "batch_date_hint": "Date format example: 2026-03-01",
         "batch_weekday": "Weekday",
         "batch_search_hint": "Search Today Courses in bulk. Use 3 or wed for Wednesday.",
         "batch_search": "Search replays",
@@ -449,6 +465,7 @@ TEXT = {
         "batch_course_keyword": "Course keyword",
         "batch_start_date": "Start date",
         "batch_end_date": "End date",
+        "batch_date_hint": "Date format example: 2026-03-01",
         "batch_weekday": "Weekday",
         "batch_search_hint": "Search Today Courses in bulk. Use 3 or wed for Wednesday.",
         "batch_search": "Search replays",
@@ -503,7 +520,7 @@ SIMPLE_LABELS = {
         "use_api_source": "填入推荐 API 地址",
         "copy_api_base": "复制 API 地址",
         "hero_title": "同济课程字幕工具",
-        "hero_subtitle": "粘贴课程回放链接，选择字幕语言，然后一键生成视频和字幕。",
+        "hero_subtitle": "粘贴课程页链接或 MP4 长链接，选择字幕语言，然后一键生成视频和字幕。",
         "primary_action": "开始生成",
     },
     "en": {
@@ -526,7 +543,7 @@ SIMPLE_LABELS = {
         "use_api_source": "Use recommended API URL",
         "copy_api_base": "Copy API URL",
         "hero_title": "Tongji Course Subtitle Tool",
-        "hero_subtitle": "Paste a replay link, choose a subtitle language, then generate the video and subtitles.",
+        "hero_subtitle": "Paste a replay page URL or MP4 direct URL, choose a subtitle language, then generate the video and subtitles.",
         "primary_action": "Start",
     },
     "ru": {
@@ -560,10 +577,12 @@ GUIDE_TEXT = {
 1. 在“配置”里填写同济账号、同济密码。
 2. 如果要自动翻译成俄语/英语，填写 API Key 和 API 地址，然后点“测试 API”。
 3. 点“保存配置”。
-4. 在“第 1 步”粘贴课程回放链接。
+4. 在“第 1 步”粘贴课程页链接，或粘贴你已经获取到的 MP4 长链接。
 5. 在“字幕语言”选择最终字幕语言。
 6. 点“一键生成 PotPlayer 成品”。
 7. 完成后点“打开输出目录”，用 PotPlayer 打开生成的 mp4。
+
+转录和添加字幕通常需要较长时间，建议在准备观看前提前生成。
 
 结果会是同名文件，例如：
 sample_course.mp4
@@ -631,10 +650,12 @@ lesson.ru.srt
 1. Fill Tongji ID and password.
 2. For automatic translation, fill API Key and API base URL, then click Test API.
 3. Save settings.
-4. Paste the course replay link.
+4. Paste the replay page URL, or paste an MP4 direct URL you already obtained.
 5. Choose the final subtitle language.
 6. Click One-click PotPlayer output.
 7. Open the output folder and play the mp4 with PotPlayer.
+
+Transcription and subtitle generation may take a while, so it is best to prepare them before you start watching.
 
 Two translation modes:
 
@@ -653,6 +674,8 @@ PotPlayer loads subtitles automatically when video and SRT have the same name.""
 5. Выберите язык субтитров.
 6. Нажмите один клик для PotPlayer.
 7. Откройте папку результата и запустите mp4 в PotPlayer.
+
+Распознавание речи и подготовка субтитров могут занять заметное время, поэтому лучше запускать их заранее.
 
 Без API:
 
@@ -716,8 +739,8 @@ def _write_app_log(text: str) -> None:
 class LookTongjiGui:
     def __init__(self, root: Tk) -> None:
         self.root = root
-        self.root.geometry("1040x760")
-        self.root.minsize(920, 660)
+        self.root.geometry("1120x780")
+        self.root.minsize(980, 700)
         self._setup_theme()
 
         env = _read_env()
@@ -784,6 +807,7 @@ class LookTongjiGui:
         self.cancel_requested = False
 
         self._build()
+        self._center_window()
         self.root.after(100, self._drain_log_queue)
 
     def _setup_theme(self) -> None:
@@ -791,23 +815,47 @@ class LookTongjiGui:
         self.root.option_add("*Font", UI_FONT)
         self.root.option_add("*Button.Font", UI_FONT)
         self.root.option_add("*Entry.Font", UI_FONT)
+        self.root.option_add("*Labelframe*Font", UI_FONT_SECTION)
+        self.root.option_add("*Menu.Font", UI_FONT)
         self.root.option_add("*Text.Font", MONO_FONT)
         style = ttk.Style(self.root)
         try:
             style.theme_use("clam")
         except Exception:
             pass
-        style.configure("TNotebook", background=BG_COLOR, borderwidth=0)
-        style.configure("TNotebook.Tab", padding=(14, 8), font=UI_FONT_TAB)
-        style.map("TNotebook.Tab", background=[("selected", PANEL_BG)], foreground=[("selected", ACCENT_COLOR)])
+        style.configure("TNotebook", background=BG_COLOR, borderwidth=0, tabmargins=(10, 10, 10, 0))
+        style.configure(
+            "TNotebook.Tab",
+            padding=(18, 10),
+            font=UI_FONT_TAB,
+            background="#e8e0d4",
+            foreground=MUTED_COLOR,
+            borderwidth=0,
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", PANEL_BG), ("active", ACCENT_SOFT)],
+            foreground=[("selected", TEXT_COLOR), ("active", TEXT_COLOR)],
+        )
         style.configure(
             "Horizontal.TProgressbar",
-            troughcolor="#e6edf7",
-            background=SUCCESS_COLOR,
-            bordercolor="#e6edf7",
-            lightcolor=SUCCESS_COLOR,
-            darkcolor=SUCCESS_COLOR,
+            troughcolor="#e9e2d8",
+            background=ACCENT_COLOR,
+            bordercolor="#e9e2d8",
+            lightcolor=ACCENT_COLOR,
+            darkcolor=ACCENT_COLOR,
+            thickness=12,
         )
+
+    def _center_window(self) -> None:
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = max((screen_width - width) // 2, 0)
+        y = max((screen_height - height) // 2 - 24, 0)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
 
     def t(self, key: str) -> str:
         return TEXT[self.lang].get(key, TEXT["en"].get(key, key))
@@ -1125,23 +1173,118 @@ class LookTongjiGui:
     def _simple_label(self, key: str) -> str:
         return SIMPLE_LABELS.get(self.lang, SIMPLE_LABELS["zh"]).get(key, key)
 
+    def _apply_button_style(self, button: Button, tone: str = "soft", compact: bool = False) -> None:
+        palette = {
+            "accent": {
+                "bg": ACCENT_COLOR,
+                "fg": "white",
+                "activebackground": ACCENT_DARK,
+                "activeforeground": "white",
+            },
+            "danger": {
+                "bg": DANGER_SOFT,
+                "fg": DANGER_COLOR,
+                "activebackground": "#fecdd3",
+                "activeforeground": DANGER_COLOR,
+            },
+            "soft": {
+                "bg": ACCENT_SOFT,
+                "fg": ACCENT_DARK,
+                "activebackground": "#c7e7df",
+                "activeforeground": TEXT_COLOR,
+            },
+        }
+        colors = palette.get(tone, palette["soft"])
+        button.configure(
+            bg=colors["bg"],
+            fg=colors["fg"],
+            activebackground=colors["activebackground"],
+            activeforeground=colors["activeforeground"],
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            cursor="hand2",
+            padx=10 if compact else 14,
+            pady=5 if compact else 7,
+        )
+
+    def _style_option_menu(self, widget) -> None:
+        widget.configure(
+            bg=ACCENT_SOFT,
+            fg=ACCENT_DARK,
+            activebackground="#c7e7df",
+            activeforeground=TEXT_COLOR,
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            padx=10,
+            pady=5,
+            cursor="hand2",
+        )
+        try:
+            widget["menu"].configure(
+                bg=PANEL_BG,
+                fg=TEXT_COLOR,
+                activebackground=ACCENT_SOFT,
+                activeforeground=TEXT_COLOR,
+                relief="flat",
+                bd=0,
+            )
+        except Exception:
+            pass
+
+    def _style_note_label(self, label: Label, wraplength: int = 760) -> None:
+        label.configure(
+            bg=NOTE_BG,
+            fg=NOTE_FG,
+            padx=10,
+            pady=7,
+            justify="left",
+            wraplength=wraplength,
+        )
+
+    def _make_badge(self, parent: Frame, text: str) -> None:
+        Label(
+            parent,
+            text=text,
+            bg="#173b57",
+            fg=HERO_FG,
+            font=UI_FONT_BADGE,
+            padx=10,
+            pady=4,
+        ).pack(side="left", padx=(0, 8))
+
     def _build_simple_tool(self, container: Frame, log_text: str = "") -> None:
-        header = Frame(container, bg=BG_COLOR)
-        header.pack(fill=X, pady=(0, 10))
+        header = Frame(
+            container,
+            bg=HERO_BG,
+            padx=24,
+            pady=22,
+            highlightthickness=1,
+            highlightbackground=HERO_EDGE,
+        )
+        header.pack(fill=X, pady=(0, 14))
         Label(
             header,
             text=self._simple_label("hero_title"),
-            bg=BG_COLOR,
-            fg=TEXT_COLOR,
+            bg=HERO_BG,
+            fg=HERO_FG,
             font=UI_FONT_HERO,
         ).pack(anchor="w")
         Label(
             header,
             text=self._simple_label("hero_subtitle"),
-            bg=BG_COLOR,
-            fg=MUTED_COLOR,
+            bg=HERO_BG,
+            fg=HERO_MUTED,
             font=UI_FONT_SMALL,
-        ).pack(anchor="w", pady=(4, 0))
+            wraplength=760,
+            justify="left",
+        ).pack(anchor="w", pady=(6, 0))
+        badge_row = Frame(header, bg=HERO_BG)
+        badge_row.pack(anchor="w", pady=(14, 0))
+        self._make_badge(badge_row, "Tongji Look")
+        self._make_badge(badge_row, "PotPlayer")
+        self._make_badge(badge_row, "Self-use Mode" if SELFUSE_ENABLED else "Public Mode")
 
         cfg = LabelFrame(container, text=self._simple_label("config_line"), padx=16, pady=12)
         cfg.pack(fill=X)
@@ -1149,11 +1292,13 @@ class LookTongjiGui:
             cfg.grid_columnconfigure(col, weight=1)
 
         Label(cfg, text=self.t("ui_language")).grid(row=0, column=0, sticky=W, pady=3)
-        OptionMenu(cfg, self.language_label, *LANGUAGE_LABELS.values(), command=self.change_language).grid(
+        language_menu = OptionMenu(cfg, self.language_label, *LANGUAGE_LABELS.values(), command=self.change_language)
+        language_menu.grid(
             row=0, column=1, sticky=W, pady=3
         )
+        self._style_option_menu(language_menu)
         Label(cfg, text=self.t("username")).grid(row=0, column=2, sticky=W, padx=(18, 4), pady=3)
-        Entry(cfg, textvariable=self.username, width=20).grid(row=0, column=3, sticky=W, pady=3)
+        Entry(cfg, textvariable=self.username, width=20).grid(row=0, column=3, sticky="ew", pady=3)
 
         Label(cfg, text=self.t("password")).grid(row=1, column=0, sticky=W, pady=3)
         self.password_entry = Entry(
@@ -1162,7 +1307,7 @@ class LookTongjiGui:
             width=24,
             show="" if self.show_password.get() else "*",
         )
-        self.password_entry.grid(row=1, column=1, sticky=W, pady=3)
+        self.password_entry.grid(row=1, column=1, sticky="ew", pady=3)
         Checkbutton(
             cfg,
             text=self.t("show_secret"),
@@ -1177,7 +1322,7 @@ class LookTongjiGui:
             width=38,
             show="" if self.show_api_key.get() else "*",
         )
-        self.api_key_entry.grid(row=2, column=1, columnspan=2, sticky=W, pady=3)
+        self.api_key_entry.grid(row=2, column=1, columnspan=2, sticky="ew", pady=3)
         Checkbutton(
             cfg,
             text=self.t("show_secret"),
@@ -1186,20 +1331,30 @@ class LookTongjiGui:
         ).grid(row=2, column=3, sticky=W, pady=3)
 
         Label(cfg, text=f"{self.t('api_base_url')} ({self.t('optional')})").grid(row=3, column=0, sticky=W, pady=3)
-        Entry(cfg, textvariable=self.api_base_url, width=48).grid(row=3, column=1, columnspan=3, sticky=W, pady=3)
+        Entry(cfg, textvariable=self.api_base_url, width=48).grid(row=3, column=1, columnspan=3, sticky="ew", pady=3)
 
         Label(cfg, text=self.t("proofread_mode")).grid(row=4, column=0, sticky=W, pady=3)
-        OptionMenu(
+        proofread_menu = OptionMenu(
             cfg,
             self.proofread_mode_label,
             *PROOFREAD_MODE_LABELS.get(self.lang, PROOFREAD_MODE_LABELS["zh"]).values(),
             command=self.change_proofread_mode,
-        ).grid(row=4, column=1, sticky=W, pady=3)
-        Label(cfg, text=self.t("proofread_hint"), fg="#555555").grid(row=4, column=2, columnspan=2, sticky=W, pady=3)
+        )
+        proofread_menu.grid(row=4, column=1, sticky=W, pady=3)
+        self._style_option_menu(proofread_menu)
+        proofread_hint = Label(cfg, text=self.t("proofread_hint"))
+        proofread_hint.grid(row=4, column=2, columnspan=2, sticky="ew", pady=3, padx=(10, 0))
+        self._style_note_label(proofread_hint, wraplength=420)
 
-        Button(cfg, text=self.t("save_config"), command=self.save_config, padx=12).grid(row=5, column=1, sticky=W, pady=(8, 0))
-        Button(cfg, text=self.t("test_api"), command=self.test_api, padx=10).grid(row=5, column=2, sticky=W, padx=8, pady=(8, 0))
-        Button(cfg, text=self.t("test_login"), command=self.test_login, padx=10).grid(row=5, column=3, sticky=W, pady=(8, 0))
+        save_button = Button(cfg, text=self.t("save_config"), command=self.save_config, padx=12)
+        save_button.grid(row=5, column=1, sticky=W, pady=(10, 0))
+        self._apply_button_style(save_button)
+        test_api_button = Button(cfg, text=self.t("test_api"), command=self.test_api, padx=10)
+        test_api_button.grid(row=5, column=2, sticky=W, padx=8, pady=(10, 0))
+        self._apply_button_style(test_api_button, compact=True)
+        test_login_button = Button(cfg, text=self.t("test_login"), command=self.test_login, padx=10)
+        test_login_button.grid(row=5, column=3, sticky=W, pady=(10, 0))
+        self._apply_button_style(test_login_button, compact=True)
 
         quick = LabelFrame(container, text=self._simple_label("quick"), padx=16, pady=12)
         quick.pack(fill=X, pady=(10, 0))
@@ -1207,12 +1362,14 @@ class LookTongjiGui:
         Label(quick, text=self.t("lecture_url")).grid(row=0, column=0, sticky=W, pady=3)
         Entry(quick, textvariable=self.lecture_url, width=76).grid(row=0, column=1, columnspan=4, sticky="ew", pady=3)
         Label(quick, text=self.t("subtitle_language")).grid(row=1, column=0, sticky=W, pady=3)
-        OptionMenu(
+        subtitle_menu = OptionMenu(
             quick,
             self.subtitle_language_label,
             *SUBTITLE_LANGUAGE_LABELS.values(),
             command=self.change_subtitle_language,
-        ).grid(row=1, column=1, sticky=W, pady=3)
+        )
+        subtitle_menu.grid(row=1, column=1, sticky=W, pady=3)
+        self._style_option_menu(subtitle_menu)
         primary_button = Button(
             quick,
             text=f"{self._simple_label('primary_action')}  -  {self._simple_label('auto_generate')}",
@@ -1229,28 +1386,128 @@ class LookTongjiGui:
         primary_button.grid(
             row=1, column=2, sticky=W, padx=10, pady=3
         )
-        Button(quick, text=self.t("open_output"), command=self.open_output_dir, padx=12).grid(
-            row=1, column=3, sticky=W, padx=6, pady=3
+        open_output_button = Button(quick, text=self.t("open_output"), command=self.open_output_dir, padx=12)
+        open_output_button.grid(row=1, column=3, sticky=W, padx=6, pady=3)
+        self._apply_button_style(open_output_button, compact=True)
+        potplayer_button = Button(
+            quick,
+            text=self._simple_label("potplayer_download"),
+            command=self.open_potplayer_site,
+            padx=12,
         )
-        Button(quick, text=self._simple_label("potplayer_download"), command=self.open_potplayer_site, padx=12).grid(
-            row=1, column=4, sticky=W, padx=6, pady=3
-        )
-        Label(quick, text=self._simple_label("free_hint"), fg="#555555").grid(
-            row=2, column=1, columnspan=4, sticky=W, pady=(2, 4)
-        )
+        potplayer_button.grid(row=1, column=4, sticky=W, padx=6, pady=3)
+        self._apply_button_style(potplayer_button, compact=True)
+        free_hint = Label(quick, text=self._simple_label("free_hint"))
+        free_hint.grid(row=2, column=1, columnspan=4, sticky="ew", pady=(6, 6))
+        self._style_note_label(free_hint)
         Label(quick, text=self.t("output_dir")).grid(row=3, column=0, sticky=W, pady=3)
-        Entry(quick, textvariable=self.output_dir, width=56).grid(row=3, column=1, columnspan=2, sticky=W, pady=3)
-        Button(quick, text=self.t("pick_dir"), command=self.pick_output_dir, padx=10).grid(
-            row=3, column=3, sticky=W, padx=6, pady=3
-        )
+        Entry(quick, textvariable=self.output_dir, width=56).grid(row=3, column=1, columnspan=2, sticky="ew", pady=3)
+        pick_dir_button = Button(quick, text=self.t("pick_dir"), command=self.pick_output_dir, padx=10)
+        pick_dir_button.grid(row=3, column=3, sticky=W, padx=6, pady=3)
+        self._apply_button_style(pick_dir_button, compact=True)
+
+        if not SELFUSE_ENABLED:
+            search_box = LabelFrame(container, text=self.t("batch_replay"), padx=16, pady=12)
+            search_box.pack(fill=X, pady=(10, 0))
+            search_box.grid_columnconfigure(1, weight=1)
+            search_box.grid_columnconfigure(3, weight=1)
+            Label(search_box, text=self.t("batch_teacher_keyword")).grid(row=0, column=0, sticky=W, pady=3)
+            Entry(search_box, textvariable=self.batch_teacher_keyword, width=22).grid(row=0, column=1, sticky="ew", pady=3)
+            Label(search_box, text=self.t("batch_course_keyword")).grid(row=0, column=2, sticky=W, padx=(12, 0), pady=3)
+            Entry(search_box, textvariable=self.batch_course_keyword, width=22).grid(row=0, column=3, sticky="ew", pady=3)
+            Label(search_box, text=self.t("batch_start_date")).grid(row=1, column=0, sticky=W, pady=3)
+            Entry(search_box, textvariable=self.batch_start_date, width=16).grid(row=1, column=1, sticky="ew", pady=3)
+            Label(search_box, text=self.t("batch_end_date")).grid(row=1, column=2, sticky=W, padx=(12, 0), pady=3)
+            Entry(search_box, textvariable=self.batch_end_date, width=16).grid(row=1, column=3, sticky="ew", pady=3)
+            date_hint = Label(search_box, text=self.t("batch_date_hint"))
+            date_hint.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 4))
+            self._style_note_label(date_hint)
+            Label(search_box, text=self.t("batch_weekday")).grid(row=3, column=0, sticky=W, pady=3)
+            Entry(search_box, textvariable=self.batch_weekday, width=16).grid(row=3, column=1, sticky="ew", pady=3)
+            search_hint = Label(search_box, text=self.t("batch_search_hint"))
+            search_hint.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(6, 6))
+            self._style_note_label(search_hint)
+            search_button = Button(search_box, text=self.t("batch_search"), command=self.search_replays, padx=12)
+            search_button.grid(row=5, column=0, sticky=W, pady=(6, 0))
+            self._apply_button_style(search_button)
+            batch_download_button = Button(
+                search_box,
+                text=self.t("batch_download"),
+                command=self.batch_download_replays,
+                padx=12,
+            )
+            batch_download_button.grid(row=5, column=1, sticky=W, padx=8, pady=(6, 0))
+            self._apply_button_style(batch_download_button, tone="accent")
+
+            results = LabelFrame(search_box, text=self.t("selfuse_results"), padx=10, pady=8)
+            results.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+            results.grid_columnconfigure(0, weight=1)
+            results_hint = Label(results, text=self.t("selfuse_results_hint"))
+            results_hint.grid(row=0, column=0, sticky="ew")
+            self._style_note_label(results_hint)
+
+            actions = Frame(results)
+            actions.grid(row=1, column=0, sticky=W, pady=(8, 0))
+            select_all_button = Button(actions, text=self.t("selfuse_select_all"), command=self.selfuse_select_all, padx=10)
+            select_all_button.pack(side="left")
+            self._apply_button_style(select_all_button, compact=True)
+            clear_all_button = Button(actions, text=self.t("selfuse_clear_all"), command=self.selfuse_clear_all, padx=10)
+            clear_all_button.pack(side="left", padx=8)
+            self._apply_button_style(clear_all_button, compact=True)
+            export_all_button = Button(actions, text=self.t("selfuse_export_all"), command=self.selfuse_export_all, padx=10)
+            export_all_button.pack(side="left")
+            self._apply_button_style(export_all_button, compact=True)
+            export_selected_button = Button(
+                actions,
+                text=self.t("selfuse_export_selected"),
+                command=self.selfuse_export_selected,
+                padx=10,
+            )
+            export_selected_button.pack(side="left", padx=8)
+            self._apply_button_style(export_selected_button, compact=True)
+            download_selected_button = Button(
+                actions,
+                text=self.t("selfuse_download_selected"),
+                command=self.download_selected_replays,
+                padx=12,
+            )
+            download_selected_button.pack(side="left")
+            self._apply_button_style(download_selected_button, tone="accent", compact=True)
+
+            Label(results, textvariable=self.selfuse_results_summary, fg=MUTED_COLOR).grid(row=2, column=0, sticky=W, pady=(8, 6))
+
+            list_host = Frame(results)
+            list_host.grid(row=3, column=0, sticky="ew")
+            list_canvas = Canvas(list_host, height=220, highlightthickness=0, bg=PANEL_BG)
+            list_scroll = Scrollbar(list_host, orient="vertical", command=list_canvas.yview)
+            list_canvas.configure(yscrollcommand=list_scroll.set)
+            list_canvas.pack(side="left", fill="both", expand=True)
+            list_scroll.pack(side="right", fill=Y)
+
+            inner = Frame(list_canvas)
+            window_id = list_canvas.create_window((0, 0), window=inner, anchor="nw")
+
+            def _refresh_public_scroll(_event=None) -> None:
+                list_canvas.configure(scrollregion=list_canvas.bbox("all"))
+
+            def _fit_public_width(event) -> None:
+                list_canvas.itemconfigure(window_id, width=event.width)
+
+            inner.bind("<Configure>", _refresh_public_scroll)
+            list_canvas.bind("<Configure>", _fit_public_width)
+            self.selfuse_results_frame = inner
+            self.selfuse_results_canvas = list_canvas
+            self._render_selfuse_results()
 
         progress = LabelFrame(container, text=self.t("progress"), padx=16, pady=12)
         progress.pack(fill=X, pady=(10, 0))
         progress.grid_columnconfigure(0, weight=1)
         self.progress_bar = ttk.Progressbar(progress, mode="determinate", maximum=100)
         self.progress_bar.grid(row=0, column=0, sticky="ew")
-        Label(progress, textvariable=self.progress_text, fg="#555555").grid(row=0, column=1, sticky=W, padx=10)
-        Button(progress, text=self.t("cancel_task"), command=self.cancel_task, padx=12).grid(row=0, column=2, sticky=W, padx=8)
+        Label(progress, textvariable=self.progress_text, fg=MUTED_COLOR).grid(row=0, column=1, sticky=W, padx=10)
+        cancel_button = Button(progress, text=self.t("cancel_task"), command=self.cancel_task, padx=12)
+        cancel_button.grid(row=0, column=2, sticky=W, padx=8)
+        self._apply_button_style(cancel_button, tone="danger", compact=True)
 
         advanced = LabelFrame(container, text=self.t("advanced"), padx=16, pady=12)
         advanced.pack(fill=X, pady=(10, 0))
@@ -1276,31 +1533,58 @@ class LookTongjiGui:
             Entry(batch, textvariable=self.batch_start_date, width=16).grid(row=1, column=1, sticky=W, pady=3)
             Label(batch, text=self.t("batch_end_date")).grid(row=1, column=2, sticky=W, padx=(12, 0), pady=3)
             Entry(batch, textvariable=self.batch_end_date, width=16).grid(row=1, column=3, sticky=W, pady=3)
-            Label(batch, text=self.t("batch_weekday")).grid(row=2, column=0, sticky=W, pady=3)
-            Entry(batch, textvariable=self.batch_weekday, width=16).grid(row=2, column=1, sticky=W, pady=3)
-            Label(batch, text=self.t("batch_search_hint"), fg="#555555").grid(row=3, column=0, columnspan=4, sticky=W, pady=(2, 4))
-            Button(batch, text=self.t("batch_search"), command=self.search_replays, padx=12).grid(row=4, column=0, sticky=W, pady=(4, 0))
-            Button(batch, text=self.t("batch_download"), command=self.batch_download_replays, padx=12).grid(row=4, column=1, columnspan=2, sticky=W, padx=8, pady=(4, 0))
+            advanced_date_hint = Label(batch, text=self.t("batch_date_hint"))
+            advanced_date_hint.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 4))
+            self._style_note_label(advanced_date_hint)
+            Label(batch, text=self.t("batch_weekday")).grid(row=3, column=0, sticky=W, pady=3)
+            Entry(batch, textvariable=self.batch_weekday, width=16).grid(row=3, column=1, sticky=W, pady=3)
+            advanced_batch_hint = Label(batch, text=self.t("batch_search_hint"))
+            advanced_batch_hint.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(6, 6))
+            self._style_note_label(advanced_batch_hint)
+            advanced_search_button = Button(batch, text=self.t("batch_search"), command=self.search_replays, padx=12)
+            advanced_search_button.grid(row=5, column=0, sticky=W, pady=(4, 0))
+            self._apply_button_style(advanced_search_button, compact=True)
+            advanced_download_button = Button(batch, text=self.t("batch_download"), command=self.batch_download_replays, padx=12)
+            advanced_download_button.grid(row=5, column=1, columnspan=2, sticky=W, padx=8, pady=(4, 0))
+            self._apply_button_style(advanced_download_button, tone="accent", compact=True)
             if SELFUSE_ENABLED:
                 selfuse = LabelFrame(advanced, text=self.t("selfuse_tools"), padx=10, pady=8)
                 selfuse.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 0))
-                Label(selfuse, text=self.t("selfuse_hint"), fg="#555555").grid(row=0, column=0, columnspan=3, sticky=W, pady=(0, 4))
-                Button(selfuse, text=self.t("selfuse_capture"), command=self.selfuse_capture_media, padx=12).grid(row=1, column=0, sticky=W, pady=(4, 0))
-                Button(selfuse, text=self.t("selfuse_download"), command=self.selfuse_download_with_subtitles, padx=12).grid(row=1, column=1, sticky=W, padx=8, pady=(4, 0))
+                selfuse_hint = Label(selfuse, text=self.t("selfuse_hint"))
+                selfuse_hint.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+                self._style_note_label(selfuse_hint)
+                selfuse_capture_button = Button(selfuse, text=self.t("selfuse_capture"), command=self.selfuse_capture_media, padx=12)
+                selfuse_capture_button.grid(row=1, column=0, sticky=W, pady=(4, 0))
+                self._apply_button_style(selfuse_capture_button, compact=True)
+                selfuse_download_button = Button(selfuse, text=self.t("selfuse_download"), command=self.selfuse_download_with_subtitles, padx=12)
+                selfuse_download_button.grid(row=1, column=1, sticky=W, padx=8, pady=(4, 0))
+                self._apply_button_style(selfuse_download_button, tone="accent", compact=True)
                 results = LabelFrame(selfuse, text=self.t("selfuse_results"), padx=10, pady=8)
                 results.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(10, 0))
                 results.grid_columnconfigure(0, weight=1)
-                Label(results, text=self.t("selfuse_results_hint"), fg="#555555").grid(row=0, column=0, sticky=W)
+                selfuse_results_hint = Label(results, text=self.t("selfuse_results_hint"))
+                selfuse_results_hint.grid(row=0, column=0, sticky="ew")
+                self._style_note_label(selfuse_results_hint)
 
                 actions = Frame(results)
                 actions.grid(row=1, column=0, sticky=W, pady=(8, 0))
-                Button(actions, text=self.t("selfuse_select_all"), command=self.selfuse_select_all, padx=10).pack(side="left")
-                Button(actions, text=self.t("selfuse_clear_all"), command=self.selfuse_clear_all, padx=10).pack(side="left", padx=8)
-                Button(actions, text=self.t("selfuse_export_all"), command=self.selfuse_export_all, padx=10).pack(side="left")
-                Button(actions, text=self.t("selfuse_export_selected"), command=self.selfuse_export_selected, padx=10).pack(side="left", padx=8)
-                Button(actions, text=self.t("selfuse_download_selected"), command=self.selfuse_download_selected, padx=12).pack(side="left")
+                select_all_button = Button(actions, text=self.t("selfuse_select_all"), command=self.selfuse_select_all, padx=10)
+                select_all_button.pack(side="left")
+                self._apply_button_style(select_all_button, compact=True)
+                clear_all_button = Button(actions, text=self.t("selfuse_clear_all"), command=self.selfuse_clear_all, padx=10)
+                clear_all_button.pack(side="left", padx=8)
+                self._apply_button_style(clear_all_button, compact=True)
+                export_all_button = Button(actions, text=self.t("selfuse_export_all"), command=self.selfuse_export_all, padx=10)
+                export_all_button.pack(side="left")
+                self._apply_button_style(export_all_button, compact=True)
+                export_selected_button = Button(actions, text=self.t("selfuse_export_selected"), command=self.selfuse_export_selected, padx=10)
+                export_selected_button.pack(side="left", padx=8)
+                self._apply_button_style(export_selected_button, compact=True)
+                download_selected_button = Button(actions, text=self.t("selfuse_download_selected"), command=self.selfuse_download_selected, padx=12)
+                download_selected_button.pack(side="left")
+                self._apply_button_style(download_selected_button, tone="accent", compact=True)
 
-                Label(results, textvariable=self.selfuse_results_summary, fg="#555555").grid(row=2, column=0, sticky=W, pady=(6, 6))
+                Label(results, textvariable=self.selfuse_results_summary, fg=MUTED_COLOR).grid(row=2, column=0, sticky=W, pady=(6, 6))
 
                 list_host = Frame(results)
                 list_host.grid(row=3, column=0, sticky="ew")
@@ -1331,19 +1615,23 @@ class LookTongjiGui:
         top = Frame(container)
         top.pack(fill=X, pady=(0, 8))
         Label(top, text=self.t("ui_language")).pack(side="left")
-        OptionMenu(
+        guide_menu = OptionMenu(
             top,
             self.guide_language_label,
             *LANGUAGE_LABELS.values(),
             command=self.change_guide_language,
-        ).pack(side="left", padx=8)
-        Button(
+        )
+        guide_menu.pack(side="left", padx=8)
+        self._style_option_menu(guide_menu)
+        potplayer_button = Button(
             top,
             text=self._simple_label("potplayer_download"),
             command=self.open_potplayer_site,
             padx=12,
             pady=5,
-        ).pack(side="left", padx=8)
+        )
+        potplayer_button.pack(side="left", padx=8)
+        self._apply_button_style(potplayer_button, compact=True)
 
         scrollbar = Scrollbar(container)
         scrollbar.pack(side="right", fill=Y)
@@ -1356,10 +1644,18 @@ class LookTongjiGui:
     def _build_log_tab(self, container: Frame, log_text: str = "") -> None:
         top = Frame(container)
         top.pack(fill=X, pady=(0, 8))
-        Button(top, text=self._simple_label("refresh_log"), command=self.refresh_log_display, padx=12).pack(side="left")
-        Button(top, text=self.t("open_log"), command=self.open_log, padx=12).pack(side="left", padx=8)
-        Button(top, text=self._simple_label("clear_log"), command=self.clear_log_display, padx=12).pack(side="left")
-        Label(top, text=self._simple_label("log_hint"), fg="#555555").pack(side="left", padx=12)
+        refresh_button = Button(top, text=self._simple_label("refresh_log"), command=self.refresh_log_display, padx=12)
+        refresh_button.pack(side="left")
+        self._apply_button_style(refresh_button, compact=True)
+        open_log_button = Button(top, text=self.t("open_log"), command=self.open_log, padx=12)
+        open_log_button.pack(side="left", padx=8)
+        self._apply_button_style(open_log_button, compact=True)
+        clear_log_button = Button(top, text=self._simple_label("clear_log"), command=self.clear_log_display, padx=12)
+        clear_log_button.pack(side="left")
+        self._apply_button_style(clear_log_button, compact=True)
+        log_hint = Label(top, text=self._simple_label("log_hint"))
+        log_hint.pack(side="left", padx=12)
+        self._style_note_label(log_hint, wraplength=520)
 
         initial = log_text or self._read_log_file_tail()
         self.log = self._add_log_box(container, height=20, initial=initial)
@@ -1437,50 +1733,84 @@ class LookTongjiGui:
         for child in widget.winfo_children():
             cls = child.winfo_class()
             try:
+                parent_bg = BG_COLOR
+                if child.master is not None and "bg" in child.master.keys():
+                    parent_bg = child.master.cget("bg")
+                current_bg = str(child.cget("bg")) if "bg" in child.keys() else ""
+                current_fg = str(child.cget("fg")) if "fg" in child.keys() else ""
                 if cls in {"Frame", "Canvas"}:
-                    child.configure(bg=BG_COLOR)
+                    if current_bg in {PANEL_BG, HERO_BG, NOTE_BG, LOG_BG}:
+                        desired_bg = current_bg
+                    else:
+                        desired_bg = parent_bg if parent_bg in {PANEL_BG, HERO_BG, NOTE_BG, LOG_BG} else BG_COLOR
+                    child.configure(bg=desired_bg, highlightbackground=desired_bg)
                 elif cls == "Labelframe":
-                    child.configure(bg=PANEL_BG, fg=TEXT_COLOR, relief="solid", bd=1)
-                elif cls == "Label":
-                    parent_cls = child.master.winfo_class() if child.master else ""
-                    bg = PANEL_BG if parent_cls == "Labelframe" else BG_COLOR
-                    child.configure(bg=bg, fg=TEXT_COLOR)
-                elif cls == "Button":
-                    if child.cget("bg") != ACCENT_COLOR:
-                        child.configure(
-                            bg="#eef4ff",
-                            fg=ACCENT_DARK,
-                            activebackground="#dbeafe",
-                            activeforeground=ACCENT_DARK,
-                            relief="flat",
-                            bd=0,
-                            padx=max(int(child.cget("padx") or 0), 10),
-                            pady=max(int(child.cget("pady") or 0), 5),
-                            cursor="hand2",
-                        )
-                elif cls == "Entry":
-                    child.configure(bg=ENTRY_BG, fg=TEXT_COLOR, relief="solid", bd=1)
-                elif cls == "Menubutton":
                     child.configure(
-                        bg="#eef4ff",
-                        fg=ACCENT_DARK,
-                        activebackground="#dbeafe",
-                        activeforeground=ACCENT_DARK,
+                        bg=PANEL_BG,
+                        fg=TEXT_COLOR,
+                        relief="flat",
+                        bd=1,
+                        highlightthickness=1,
+                        highlightbackground=BORDER_COLOR,
+                    )
+                elif cls == "Label":
+                    if current_bg in {PANEL_BG, HERO_BG, NOTE_BG, LOG_BG}:
+                        bg = current_bg
+                    else:
+                        bg = parent_bg if parent_bg in {PANEL_BG, HERO_BG, NOTE_BG, LOG_BG} else BG_COLOR
+                    if current_fg.lower() in {"systembuttontext", "black", "#000000"}:
+                        if bg == HERO_BG:
+                            fg = HERO_FG
+                        elif bg == NOTE_BG:
+                            fg = NOTE_FG
+                        else:
+                            fg = TEXT_COLOR
+                    else:
+                        fg = current_fg
+                    child.configure(bg=bg, fg=fg)
+                elif cls == "Button":
+                    bg = str(child.cget("bg")).lower()
+                    fg = str(child.cget("fg")).lower()
+                    try:
+                        compact = int(child.cget("padx") or 0) < 18 and int(child.cget("pady") or 0) < 8
+                    except Exception:
+                        compact = True
+                    if bg == ACCENT_COLOR.lower() or fg == "white":
+                        self._apply_button_style(child, tone="accent", compact=compact)
+                    elif bg == DANGER_SOFT.lower() or fg == DANGER_COLOR.lower():
+                        self._apply_button_style(child, tone="danger", compact=compact)
+                    else:
+                        self._apply_button_style(child, compact=compact)
+                elif cls == "Entry":
+                    child.configure(
+                        bg=ENTRY_BG,
+                        fg=TEXT_COLOR,
                         relief="flat",
                         bd=0,
-                        padx=10,
-                        pady=5,
-                        cursor="hand2",
+                        insertbackground=TEXT_COLOR,
+                        highlightthickness=1,
+                        highlightbackground=ENTRY_BORDER,
+                        highlightcolor=ACCENT_COLOR,
                     )
+                elif cls == "Menubutton":
+                    self._style_option_menu(child)
                 elif cls == "Checkbutton":
-                    parent_cls = child.master.winfo_class() if child.master else ""
                     child.configure(
-                        bg=PANEL_BG if parent_cls == "Labelframe" else BG_COLOR,
+                        bg=parent_bg if parent_bg in {PANEL_BG, HERO_BG, NOTE_BG} else BG_COLOR,
                         fg=TEXT_COLOR,
-                        activebackground=PANEL_BG,
+                        activebackground=parent_bg if parent_bg in {PANEL_BG, HERO_BG, NOTE_BG} else BG_COLOR,
+                        selectcolor=PANEL_BG,
                     )
                 elif cls == "Text" and child not in self.log_widgets:
-                    child.configure(bg=PANEL_BG, fg=TEXT_COLOR, relief="flat")
+                    child.configure(
+                        bg=PANEL_BG,
+                        fg=TEXT_COLOR,
+                        relief="flat",
+                        bd=0,
+                        insertbackground=TEXT_COLOR,
+                        highlightthickness=1,
+                        highlightbackground=BORDER_COLOR,
+                    )
             except Exception:
                 pass
             self._polish_tree(child)
@@ -1851,6 +2181,8 @@ class LookTongjiGui:
             messagebox.showwarning(self.t("missing_batch_range_title"), self.t("missing_batch_range_body"))
             return
         cmd = self._base_cmd() + ["search-replay-range", *args, "--output-dir", self.output_dir.get().strip()]
+        if not SELFUSE_ENABLED:
+            cmd.append("--owned-only")
         self.run_command(cmd, task="batch_search")
 
     def batch_download_replays(self) -> None:
@@ -1868,6 +2200,33 @@ class LookTongjiGui:
             "--target",
             target,
         ] + self._proofread_args()
+        if not SELFUSE_ENABLED:
+            cmd.append("--owned-only")
+        if target.lower() not in {"zh", "cn", "chinese"}:
+            if self.api_key.get().strip():
+                cmd += ["--model", self.model.get().strip() or "gpt-4.1-mini"]
+            else:
+                cmd += ["--translation-mode", "free"]
+        self.run_command(cmd, task="batch_download_replays")
+
+    def download_selected_replays(self) -> None:
+        self.save_config(show_message=False)
+        items = self._selected_selfuse_replay_items()
+        export_path = self._write_selfuse_items(items, selected_only=True)
+        if export_path is None:
+            return
+        target = self.target.get().strip() or "zh"
+        cmd = self._base_cmd() + [
+            "batch-download-replays",
+            "--input-json",
+            str(export_path),
+            "--output-dir",
+            self.output_dir.get().strip(),
+            "--target",
+            target,
+        ] + self._proofread_args()
+        if not SELFUSE_ENABLED:
+            cmd.append("--owned-only")
         if target.lower() not in {"zh", "cn", "chinese"}:
             if self.api_key.get().strip():
                 cmd += ["--model", self.model.get().strip() or "gpt-4.1-mini"]
@@ -2103,7 +2462,13 @@ class LookTongjiGui:
         try:
             popen_kwargs = {}
             if os.name == "nt":
-                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+                creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                if creationflags:
+                    popen_kwargs["creationflags"] = creationflags
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = 0
+                popen_kwargs["startupinfo"] = startupinfo
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(Path.cwd()),
@@ -2192,7 +2557,7 @@ class LookTongjiGui:
         self.progress_text.set(self.t("progress_done") if code == 0 else self.t("progress_failed"))
         task = self.current_task
         self.current_task = ""
-        if task == "batch_search" and SELFUSE_ENABLED and self.selfuse_last_search_json:
+        if task == "batch_search" and self.selfuse_last_search_json:
             self._load_selfuse_replay_json(self.selfuse_last_search_json)
         if task == "api_test":
             if code == 0:

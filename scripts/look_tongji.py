@@ -15,9 +15,11 @@ import builtins
 import concurrent.futures
 import functools
 import getpass
+import hashlib
 import json
 import math
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -39,6 +41,22 @@ from tongji_backend.transcriber import NoAudioStreamError, Transcriber, Transcri
 
 
 print = functools.partial(builtins.print, flush=True)
+
+
+def _hidden_subprocess_kwargs(*, new_process_group: bool = False) -> dict[str, Any]:
+    if os.name != "nt":
+        return {}
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if new_process_group:
+        creationflags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = 0
+    kwargs: dict[str, Any] = {"startupinfo": startupinfo}
+    if creationflags:
+        kwargs["creationflags"] = creationflags
+    return kwargs
+
 
 DEFAULT_TRANSLATION_MODEL = "gpt-4.1-mini"
 LANGUAGE_NAMES = {
@@ -112,12 +130,103 @@ def _safe_filename_part(value: str) -> str:
     return cleaned.strip("._-") or "item"
 
 
+def _safe_output_name(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "item"
+    text = re.sub(r'[<>:"/\\|?*\x00-\x1F]+', "_", text)
+    text = re.sub(r"\s+", " ", text)
+    text = text.rstrip(" .")
+    return text or "item"
+
+
+def _today_output_date() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _normalize_output_date(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return _today_output_date()
+    match = re.search(r"(\d{4})\D?(\d{1,2})\D?(\d{1,2})", text)
+    if match:
+        year, month, day = [int(part) for part in match.groups()]
+        return f"{year:04d}-{month:02d}-{day:02d}"
+    return _today_output_date()
+
+
+def _direct_output_base_name(output_dir: str | None) -> str:
+    out_dir = _output_dir(output_dir)
+    today = _today_output_date()
+    numbers = list(range(1, 1001))
+    random.shuffle(numbers)
+    suffixes = (".mp4", ".srt", ".zh.srt", ".txt", ".json", ".video.json")
+    for number in numbers:
+        base = f"{today}-{number}"
+        if not any((out_dir / f"{base}{suffix}").exists() for suffix in suffixes):
+            return base
+    return f"{today}-{random.randint(1, 1000)}"
+
+
+def _replay_output_base_name(
+    *,
+    client: TongjiClient,
+    course_id: str,
+    sub_id: str,
+    title_hint: str = "",
+    date_hint: str = "",
+) -> str:
+    title = str(title_hint or "").strip()
+    lecture_date = str(date_hint or "").strip()
+    try:
+        detail = client.get_course_detail(course_id)
+    except Exception:
+        detail = {}
+    if not title:
+        title = str(detail.get("title") or "").strip()
+    lectures = detail.get("lectures") or []
+    if isinstance(lectures, list):
+        for lecture in lectures:
+            if str(lecture.get("sub_id") or "").strip() != str(sub_id or "").strip():
+                continue
+            if not lecture_date:
+                lecture_date = str(lecture.get("date") or "").strip()
+            if not title:
+                title = str(lecture.get("title") or lecture.get("sub_title") or "").strip()
+            break
+    title_part = _safe_output_name(title or course_id or "course")
+    date_part = _normalize_output_date(lecture_date)
+    return _safe_output_name(f"{date_part}-{title_part}")
+
+
 def _guess_ext_from_url(url: str) -> str:
     path = urlparse(url).path or ""
     suffix = Path(path).suffix.lower()
     if suffix in {".jpg", ".jpeg", ".png", ".webp", ".bmp"}:
         return suffix
     return ".jpg"
+
+
+def _direct_media_url_from_lecture_url(url: str) -> str:
+    text = (url or "").strip()
+    if not text:
+        return ""
+    parsed = urlparse(text)
+    if parsed.scheme not in {"http", "https"}:
+        return ""
+    suffix = Path(parsed.path or "").suffix.lower()
+    if suffix in {".mp4", ".m3u8", ".mp3", ".m4a", ".wav", ".aac", ".webm", ".mov", ".mkv"}:
+        return text
+    return ""
+
+
+def _direct_media_base_name(url: str) -> str:
+    parsed = urlparse(url)
+    stem = _safe_filename_part(Path(parsed.path or "").stem)
+    if stem:
+        return stem
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:12]
+    return f"look_media_{digest}"
 
 
 def _language_name(value: str) -> str:
@@ -329,6 +438,109 @@ def _search_replay_range(
             str(item.get("date") or ""),
             str(item.get("bucket_id") or ""),
             str(item.get("course_begin") or ""),
+            str(item.get("title") or ""),
+        )
+    )
+    return hits, failures
+
+
+def _search_owned_replay_range(
+    client: TongjiClient,
+    *,
+    teacher_keyword: str,
+    title_keyword: str,
+    start_date: str,
+    end_date: str,
+    weekday: int | None,
+    replay_only: bool,
+    max_results: int = 0,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    target_dates = set(_iter_date_strings(start_date, end_date, weekday=weekday))
+    hits: list[dict[str, Any]] = []
+    failures: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    try:
+        courses = client.get_all_courses()
+    except Exception as e:
+        raise RuntimeError(f"get_all_courses failed: {type(e).__name__}: {e}") from e
+
+    candidate_courses = list(courses)
+    print(f"[SearchReplay] Owned courses: {len(candidate_courses)}")
+
+    for index, course in enumerate(candidate_courses, start=1):
+        course_id = str(course.get("course_id") or "").strip()
+        if not course_id:
+            continue
+        print(f"[SearchReplay] Progress: {index}/{len(candidate_courses)}")
+        print(f"[SearchReplay] Checking course {course_id}")
+        try:
+            detail = client.get_course_detail(course_id)
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"
+            failures.append({"course_id": course_id, "error": error})
+            print(f"[SearchReplay] WARN course_id={course_id}: {error}")
+            continue
+
+        course_title = str(detail.get("title") or course.get("title") or "").strip()
+        course_teacher = str(detail.get("teacher") or course.get("teacher") or "").strip()
+        lectures = detail.get("lectures") or []
+        if not isinstance(lectures, list):
+            continue
+
+        for lecture in lectures:
+            if not isinstance(lecture, dict):
+                continue
+            sub_id = str(lecture.get("sub_id") or "").strip()
+            if not sub_id:
+                continue
+            try:
+                lecture_date = _normalize_date_text(str(lecture.get("date") or "").strip())
+            except Exception:
+                continue
+            if lecture_date not in target_dates:
+                continue
+
+            has_playback = bool(lecture.get("has_playback"))
+            if replay_only and not has_playback:
+                continue
+
+            item = {
+                "date": lecture_date,
+                "search_date": lecture_date,
+                "title": course_title,
+                "course_name": course_title,
+                "sub_title": str(lecture.get("sub_title") or "").strip(),
+                "teacher": course_teacher,
+                "lecturer_name": str(lecture.get("lecturer_name") or course_teacher).strip(),
+                "course_id": course_id,
+                "sub_id": sub_id,
+                "status_label": "回放" if has_playback else "",
+                "has_playback": has_playback,
+                "bucket_id": "",
+                "bucket_name": "owned-course",
+            }
+            if not _replay_item_matches(
+                item,
+                teacher_keyword=teacher_keyword,
+                title_keyword=title_keyword,
+                replay_only=replay_only,
+            ):
+                continue
+
+            key = (course_id, sub_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            hits.append(item)
+            if max_results and len(hits) >= max_results:
+                return hits, failures
+
+    hits.sort(
+        key=lambda item: (
+            str(item.get("date") or ""),
+            str(item.get("course_id") or ""),
+            str(item.get("sub_id") or ""),
             str(item.get("title") or ""),
         )
     )
@@ -840,6 +1052,60 @@ def _short_error_text(text: str, limit: int = 140) -> str:
     return cleaned[:limit] + ("..." if len(cleaned) > limit else "")
 
 
+def _iter_exception_chain(exc: BaseException | None):
+    seen: set[int] = set()
+    current = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        current = current.__cause__ or current.__context__
+
+
+def _friendly_exception_text(exc: BaseException, limit: int = 180) -> str:
+    saw_connection_error = False
+    for item in _iter_exception_chain(exc):
+        if isinstance(item, requests.exceptions.Timeout):
+            return "request timed out"
+        if isinstance(item, requests.exceptions.ProxyError):
+            return "proxy connection failed"
+        if isinstance(item, requests.exceptions.SSLError):
+            return "TLS/SSL handshake failed"
+        if isinstance(item, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+            code = getattr(item, "winerror", None)
+            if code is None and item.args:
+                try:
+                    code = int(item.args[0])
+                except Exception:
+                    code = None
+            if code == 10054:
+                return "connection reset by remote host (WinError 10054)"
+            if code == 10053:
+                return "connection aborted by local network stack (WinError 10053)"
+            return type(item).__name__
+        if isinstance(item, requests.exceptions.ConnectionError):
+            saw_connection_error = True
+        elif isinstance(item, OSError):
+            code = getattr(item, "winerror", None)
+            if code == 10054:
+                return "connection reset by remote host (WinError 10054)"
+            if code == 10053:
+                return "connection aborted by local network stack (WinError 10053)"
+
+    text = _short_error_text(str(exc), limit=limit)
+    lower = text.lower()
+    if "connectionreseterror(10054" in lower or "winerror 10054" in lower:
+        return "connection reset by remote host (WinError 10054)"
+    if "connectionabortederror(10053" in lower or "winerror 10053" in lower:
+        return "connection aborted by local network stack (WinError 10053)"
+    if "connection aborted" in lower:
+        return "network connection failed: remote side aborted the request"
+    if "timed out" in lower or "timeout" in lower:
+        return "request timed out"
+    if saw_connection_error:
+        return f"network connection failed: {text}" if text else "network connection failed"
+    return text or type(exc).__name__
+
+
 def _time_to_ms(value: str) -> int:
     match = re.match(r"(\d+):(\d+):(\d+)(?:[.,](\d+))?", value.strip())
     if not match:
@@ -875,6 +1141,7 @@ def _probe_media_duration_ms(path: Path, timeout: int = 30) -> int:
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
+            **_hidden_subprocess_kwargs(),
         )
     except Exception:
         return 0
@@ -961,6 +1228,7 @@ def _extract_mono_pcm_wav(video_path: Path, wav_path: Path, timeout: int = 900) 
         encoding="utf-8",
         errors="replace",
         timeout=timeout,
+        **_hidden_subprocess_kwargs(),
     )
     if proc.returncode != 0 or not wav_path.is_file() or wav_path.stat().st_size < 1024:
         raise RuntimeError(f"ffmpeg audio extraction failed: {(proc.stdout or '')[-500:]}")
@@ -1247,6 +1515,7 @@ def _download_video_stream(
         text=True,
         encoding="utf-8",
         errors="replace",
+        **_hidden_subprocess_kwargs(),
     )
     assert proc.stdout is not None
 
@@ -1530,7 +1799,7 @@ def _free_translate_text_google(
         except FreeTranslateRateLimited:
             raise
         except Exception as e:
-            last_error = f"{type(e).__name__}: {e}"
+            last_error = _friendly_exception_text(e)
             if attempt < retries:
                 time.sleep(min(20, attempt * 2))
     raise RuntimeError(f"Free translation failed: {last_error}")
@@ -1580,7 +1849,7 @@ def _free_translate_text_mymemory(
                 return translated
             last_error = str(data)[:300]
         except Exception as e:
-            last_error = f"{type(e).__name__}: {e}"
+            last_error = _friendly_exception_text(e)
             if attempt < retries:
                 time.sleep(min(20, attempt * 2))
     raise RuntimeError(f"MyMemory translation failed: {last_error}")
@@ -1603,7 +1872,7 @@ def _free_translate_text(
             delay=delay,
         )
     except FreeTranslateRateLimited as google_error:
-        print(f"[FreeTranslate] Google is rate-limited; using fallback now. {google_error}")
+        print(f"[FreeTranslate] Google is rate-limited; using fallback now. {_friendly_exception_text(google_error)}")
         return _free_translate_text_mymemory(
             text,
             target_language,
@@ -1612,7 +1881,7 @@ def _free_translate_text(
             delay=delay,
         )
     except Exception as google_error:
-        print(f"[FreeTranslate] Google failed, trying fallback: {_short_error_text(str(google_error))}")
+        print(f"[FreeTranslate] Google request failed; switched to fallback: {_friendly_exception_text(google_error)}")
         return _free_translate_text_mymemory(
             text,
             target_language,
@@ -1814,10 +2083,10 @@ def _translate_srt_file_free(
             except FreeTranslateRateLimited as e:
                 google_available = False
                 if not google_limit_reported:
-                    print(f"[FreeTranslate] Google is rate-limited; switching to fallback. {e}")
+                    print(f"[FreeTranslate] Google is rate-limited; switching to fallback. {_friendly_exception_text(e)}")
                     google_limit_reported = True
             except Exception as e:
-                print(f"[FreeTranslate] Google batch failed; trying fallback: {_short_error_text(str(e))}")
+                print(f"[FreeTranslate] Google batch request failed; switched to fallback: {_friendly_exception_text(e)}")
 
         if results is None:
             results = _free_translate_batch_fallback(
@@ -2378,6 +2647,7 @@ def _run_transcript_job(
     sub_id: str,
     lecture_url: str,
     output_dir: str,
+    base_name: str | None = None,
     proofread_mode: str = "off",
     proofread_model: str = "",
     tag: str = "Transcript",
@@ -2409,7 +2679,7 @@ def _run_transcript_job(
     out_dir = _output_dir(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    base = f"{course_id}_{sub_id}"
+    base = _safe_output_name(base_name or f"{course_id}_{sub_id}")
     txt_path = out_dir / f"{base}.txt"
     srt_path = out_dir / f"{base}.srt"
     meta_path = out_dir / f"{base}.json"
@@ -2458,6 +2728,7 @@ def _run_video_download_job(
     lecture_url: str,
     output_dir: str,
     timeout: int,
+    base_name: str | None = None,
 ) -> int:
     print(f"[VideoDownload] Logged in as: {username or '(unknown)'}")
     print(f"[VideoDownload] course_id={course_id} sub_id={sub_id}")
@@ -2469,7 +2740,8 @@ def _run_video_download_job(
     stream_url, http_headers = client.get_stream_params(video_url)
     out_dir = _output_dir(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    output_path = out_dir / f"{course_id}_{sub_id}.mp4"
+    base = _safe_output_name(base_name or f"{course_id}_{sub_id}")
+    output_path = out_dir / f"{base}.mp4"
 
     try:
         if _file_ready(output_path, min_bytes=1024 * 1024):
@@ -2486,12 +2758,13 @@ def _run_video_download_job(
         _print_err(f"Video download failed: {type(e).__name__}: {e}")
         return 1
 
-    meta_path = out_dir / f"{course_id}_{sub_id}.video.json"
+    meta_path = out_dir / f"{base}.video.json"
     meta_path.write_text(
         json.dumps(
             {
                 "course_id": course_id,
                 "sub_id": sub_id,
+                "base_name": base,
                 "lecture_url": lecture_url or "",
                 "video_url": video_url,
                 "generated_at": _now_iso(),
@@ -2508,6 +2781,104 @@ def _run_video_download_job(
     return 0
 
 
+def _run_direct_video_download_job(
+    *,
+    media_url: str,
+    output_dir: str,
+    timeout: int,
+    base_name: str | None = None,
+    tag: str = "VideoDownload",
+) -> Path:
+    out_dir = _output_dir(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    base = _safe_output_name(base_name or _direct_output_base_name(output_dir))
+    output_path = out_dir / f"{base}.mp4"
+
+    print(f"[{tag}] Source: direct media URL")
+    print(f"[{tag}] url={media_url}")
+    if _file_ready(output_path, min_bytes=1024 * 1024):
+        print(f"[{tag}] Reusing existing video: {output_path}")
+        print(f"[{tag}] Progress: 100/100")
+    else:
+        _download_video_stream(
+            stream_url=media_url,
+            http_headers=None,
+            output_path=output_path,
+            timeout=timeout,
+        )
+
+    meta_path = out_dir / f"{base}.video.json"
+    meta_path.write_text(
+        json.dumps(
+            {
+                "source_type": "direct_media_url",
+                "source_url": media_url,
+                "generated_at": _now_iso(),
+                "artifacts": {"video_file": str(output_path)},
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    print(f"[{tag}] Metadata: {meta_path}")
+    return output_path
+
+
+def _run_direct_transcript_job(
+    *,
+    media_url: str,
+    output_dir: str,
+    proofread_mode: str = "off",
+    proofread_model: str = "",
+    base_name: str | None = None,
+    tag: str = "Transcript",
+) -> Path:
+    transcriber = Transcriber()
+    base = _safe_output_name(base_name or _direct_output_base_name(output_dir))
+    print(f"[{tag}] Source: direct media URL")
+    print(f"[{tag}] url={media_url}")
+    transcript, srt_content, utterances = transcriber.transcribe_url(media_url)
+
+    out_dir = _output_dir(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    txt_path = out_dir / f"{base}.txt"
+    srt_path = out_dir / f"{base}.srt"
+    meta_path = out_dir / f"{base}.json"
+
+    txt_path.write_text(transcript.strip() + "\n", encoding="utf-8")
+    if srt_content:
+        srt_path.write_text(srt_content.strip() + "\n", encoding="utf-8")
+    used_proofread = _normalize_proofread_mode(proofread_mode) if srt_content else "off"
+    meta_path.write_text(
+        json.dumps(
+            {
+                "source_type": "direct_media_url",
+                "source_url": media_url,
+                "generated_at": _now_iso(),
+                "proofread_mode": used_proofread,
+                "artifacts": {
+                    "transcript_txt": str(txt_path),
+                    "subtitle_srt": str(srt_path) if srt_content else "",
+                },
+                "utterances": utterances or [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    print(f"[{tag}] Done. Files written:")
+    print(f"  - {txt_path}")
+    if srt_content:
+        print(f"  - {srt_path}")
+    print(f"  - {meta_path}")
+    return srt_path
+
+
 def _run_transcript_local_video_job(
     *,
     username: str,
@@ -2516,6 +2887,7 @@ def _run_transcript_local_video_job(
     lecture_url: str,
     video_path: Path,
     output_dir: str,
+    base_name: str | None = None,
     proofread_mode: str = "off",
     proofread_model: str = "",
     tag: str = "Transcript",
@@ -2543,7 +2915,7 @@ def _run_transcript_local_video_job(
     out_dir = _output_dir(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    base = f"{course_id}_{sub_id}"
+    base = _safe_output_name(base_name or f"{course_id}_{sub_id}")
     txt_path = out_dir / f"{base}.txt"
     srt_path = out_dir / f"{base}.srt"
     meta_path = out_dir / f"{base}.json"
@@ -2610,11 +2982,12 @@ def _run_replay_with_subtitles_job(
     retranslate: bool,
     proofread_mode: str,
     proofread_model: str,
+    base_name: str | None = None,
 ) -> dict[str, Any]:
     out_dir = _output_dir(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    base = f"{course_id}_{sub_id}"
+    base = _safe_output_name(base_name or f"{course_id}_{sub_id}")
     video_path = out_dir / f"{base}.mp4"
     txt_path = out_dir / f"{base}.txt"
     raw_source_srt = out_dir / f"{base}.srt"
@@ -2647,6 +3020,7 @@ def _run_replay_with_subtitles_job(
         lecture_url=lecture_url,
         output_dir=output_dir,
         timeout=video_timeout,
+        base_name=base,
     )
     if video_code != 0:
         result["error"] = "video download failed"
@@ -2670,6 +3044,7 @@ def _run_replay_with_subtitles_job(
             lecture_url=lecture_url,
             video_path=video_path,
             output_dir=output_dir,
+            base_name=base,
             proofread_mode=proofread_mode,
             proofread_model=proofread_model,
             tag="Transcript",
@@ -2934,6 +3309,27 @@ def _run_slide_job(
 
 
 def cmd_transcript(args: argparse.Namespace) -> int:
+    direct_media_url = _direct_media_url_from_lecture_url(args.lecture_url)
+    if direct_media_url:
+        try:
+            _run_direct_transcript_job(
+                media_url=direct_media_url,
+                output_dir=args.output_dir,
+                proofread_mode=args.proofread_mode,
+                proofread_model=args.proofread_model,
+                tag="Transcript",
+            )
+            return 0
+        except NoAudioStreamError as e:
+            _print_err(f"No audio stream: {e}")
+            return 1
+        except TranscriptionError as e:
+            _print_err(f"Transcription failed: {e}")
+            return 1
+        except Exception as e:
+            _print_err(f"Unexpected error: {type(e).__name__}: {e}")
+            return 1
+
     try:
         client, username = _ensure_authenticated_client(force_login=args.force_login)
     except Exception as e:
@@ -2950,6 +3346,7 @@ def cmd_transcript(args: argparse.Namespace) -> int:
     if not resolved:
         return 2
     course_id, sub_id = resolved
+    base_name = _replay_output_base_name(client=client, course_id=course_id, sub_id=sub_id)
     return _run_transcript_job(
         client=client,
         username=username,
@@ -2957,6 +3354,7 @@ def cmd_transcript(args: argparse.Namespace) -> int:
         sub_id=sub_id,
         lecture_url=args.lecture_url,
         output_dir=args.output_dir,
+        base_name=base_name,
         proofread_mode=args.proofread_mode,
         proofread_model=args.proofread_model,
         tag="Transcript",
@@ -3110,36 +3508,48 @@ def cmd_subtitle(args: argparse.Namespace) -> int:
                 _print_err(f"SRT file not found: {srt_path}")
                 return 2
         else:
-            try:
-                client, username = _ensure_authenticated_client(force_login=args.force_login)
-            except Exception as e:
-                _print_err(str(e))
-                return 1
-            resolved = _resolve_course_sub(
-                client,
-                lecture_url=args.lecture_url,
-                course_id=args.course_id,
-                sub_id=args.sub_id,
-                lecture_limit=args.lecture_limit,
-                tag="Subtitle",
-            )
-            if not resolved:
-                return 2
-            course_id, sub_id = resolved
-            transcript_code = _run_transcript_job(
-                client=client,
-                username=username,
-                course_id=course_id,
-                sub_id=sub_id,
-                lecture_url=args.lecture_url,
-                output_dir=args.output_dir,
-                proofread_mode=args.proofread_mode,
-                proofread_model=args.proofread_model,
-                tag="Transcript",
-            )
-            if transcript_code != 0:
-                return transcript_code
-            srt_path = _output_dir(args.output_dir) / f"{course_id}_{sub_id}.srt"
+            direct_media_url = _direct_media_url_from_lecture_url(args.lecture_url)
+            if direct_media_url:
+                srt_path = _run_direct_transcript_job(
+                    media_url=direct_media_url,
+                    output_dir=args.output_dir,
+                    proofread_mode=args.proofread_mode,
+                    proofread_model=args.proofread_model,
+                    tag="Transcript",
+                )
+            else:
+                try:
+                    client, username = _ensure_authenticated_client(force_login=args.force_login)
+                except Exception as e:
+                    _print_err(str(e))
+                    return 1
+                resolved = _resolve_course_sub(
+                    client,
+                    lecture_url=args.lecture_url,
+                    course_id=args.course_id,
+                    sub_id=args.sub_id,
+                    lecture_limit=args.lecture_limit,
+                    tag="Subtitle",
+                )
+                if not resolved:
+                    return 2
+                course_id, sub_id = resolved
+                base_name = _replay_output_base_name(client=client, course_id=course_id, sub_id=sub_id)
+                transcript_code = _run_transcript_job(
+                    client=client,
+                    username=username,
+                    course_id=course_id,
+                    sub_id=sub_id,
+                    lecture_url=args.lecture_url,
+                    output_dir=args.output_dir,
+                    base_name=base_name,
+                    proofread_mode=args.proofread_mode,
+                    proofread_model=args.proofread_model,
+                    tag="Transcript",
+                )
+                if transcript_code != 0:
+                    return transcript_code
+                srt_path = _output_dir(args.output_dir) / f"{base_name}.srt"
 
         translated_path, bilingual_path = _translate_srt_file(
             srt_path=srt_path,
@@ -3169,36 +3579,48 @@ def cmd_free_subtitle(args: argparse.Namespace) -> int:
                 _print_err(f"SRT file not found: {srt_path}")
                 return 2
         else:
-            try:
-                client, username = _ensure_authenticated_client(force_login=args.force_login)
-            except Exception as e:
-                _print_err(str(e))
-                return 1
-            resolved = _resolve_course_sub(
-                client,
-                lecture_url=args.lecture_url,
-                course_id=args.course_id,
-                sub_id=args.sub_id,
-                lecture_limit=args.lecture_limit,
-                tag="FreeTranslate",
-            )
-            if not resolved:
-                return 2
-            course_id, sub_id = resolved
-            transcript_code = _run_transcript_job(
-                client=client,
-                username=username,
-                course_id=course_id,
-                sub_id=sub_id,
-                lecture_url=args.lecture_url,
-                output_dir=args.output_dir,
-                proofread_mode=args.proofread_mode,
-                proofread_model=args.proofread_model,
-                tag="Transcript",
-            )
-            if transcript_code != 0:
-                return transcript_code
-            srt_path = _output_dir(args.output_dir) / f"{course_id}_{sub_id}.srt"
+            direct_media_url = _direct_media_url_from_lecture_url(args.lecture_url)
+            if direct_media_url:
+                srt_path = _run_direct_transcript_job(
+                    media_url=direct_media_url,
+                    output_dir=args.output_dir,
+                    proofread_mode=args.proofread_mode,
+                    proofread_model=args.proofread_model,
+                    tag="Transcript",
+                )
+            else:
+                try:
+                    client, username = _ensure_authenticated_client(force_login=args.force_login)
+                except Exception as e:
+                    _print_err(str(e))
+                    return 1
+                resolved = _resolve_course_sub(
+                    client,
+                    lecture_url=args.lecture_url,
+                    course_id=args.course_id,
+                    sub_id=args.sub_id,
+                    lecture_limit=args.lecture_limit,
+                    tag="FreeTranslate",
+                )
+                if not resolved:
+                    return 2
+                course_id, sub_id = resolved
+                base_name = _replay_output_base_name(client=client, course_id=course_id, sub_id=sub_id)
+                transcript_code = _run_transcript_job(
+                    client=client,
+                    username=username,
+                    course_id=course_id,
+                    sub_id=sub_id,
+                    lecture_url=args.lecture_url,
+                    output_dir=args.output_dir,
+                    base_name=base_name,
+                    proofread_mode=args.proofread_mode,
+                    proofread_model=args.proofread_model,
+                    tag="Transcript",
+                )
+                if transcript_code != 0:
+                    return transcript_code
+                srt_path = _output_dir(args.output_dir) / f"{base_name}.srt"
 
         translated_path, bilingual_path = _translate_srt_file_free(
             srt_path=srt_path,
@@ -3222,6 +3644,20 @@ def cmd_free_subtitle(args: argparse.Namespace) -> int:
 
 
 def cmd_download_video(args: argparse.Namespace) -> int:
+    direct_media_url = _direct_media_url_from_lecture_url(args.lecture_url)
+    if direct_media_url:
+        try:
+            _run_direct_video_download_job(
+                media_url=direct_media_url,
+                output_dir=args.output_dir,
+                timeout=args.timeout,
+                tag="VideoDownload",
+            )
+            return 0
+        except Exception as e:
+            _print_err(f"Video download failed: {type(e).__name__}: {e}")
+            return 1
+
     try:
         client, username = _ensure_authenticated_client(force_login=args.force_login)
     except Exception as e:
@@ -3239,6 +3675,7 @@ def cmd_download_video(args: argparse.Namespace) -> int:
     if not resolved:
         return 2
     course_id, sub_id = resolved
+    base_name = _replay_output_base_name(client=client, course_id=course_id, sub_id=sub_id)
     return _run_video_download_job(
         client=client,
         username=username,
@@ -3247,6 +3684,7 @@ def cmd_download_video(args: argparse.Namespace) -> int:
         lecture_url=args.lecture_url,
         output_dir=args.output_dir,
         timeout=args.timeout,
+        base_name=base_name,
     )
 
 
@@ -3274,17 +3712,31 @@ def cmd_search_replay_range(args: argparse.Namespace) -> int:
         f"weekday={weekday or '*'}"
     )
 
-    hits, failures = _search_replay_range(
-        client,
-        teacher_keyword=args.teacher_keyword,
-        title_keyword=args.course_keyword,
-        start_date=start_date,
-        end_date=end_date,
-        weekday=weekday,
-        quantum_id=args.quantum_id,
-        replay_only=not args.include_non_replay,
-        max_results=args.max_results,
-    )
+    search_func = _search_owned_replay_range if args.owned_only else _search_replay_range
+    if args.owned_only:
+        print("[SearchReplay] Scope: only courses accessible to the current account")
+        hits, failures = search_func(
+            client,
+            teacher_keyword=args.teacher_keyword,
+            title_keyword=args.course_keyword,
+            start_date=start_date,
+            end_date=end_date,
+            weekday=weekday,
+            replay_only=not args.include_non_replay,
+            max_results=args.max_results,
+        )
+    else:
+        hits, failures = search_func(
+            client,
+            teacher_keyword=args.teacher_keyword,
+            title_keyword=args.course_keyword,
+            start_date=start_date,
+            end_date=end_date,
+            weekday=weekday,
+            quantum_id=args.quantum_id,
+            replay_only=not args.include_non_replay,
+            max_results=args.max_results,
+        )
 
     out_dir = _output_dir(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -3358,17 +3810,30 @@ def cmd_batch_download_replays(args: argparse.Namespace) -> int:
             f"weekday={weekday or '*'} "
             f"target={args.target or 'zh'}"
         )
-        items, failures = _search_replay_range(
-            client,
-            teacher_keyword=args.teacher_keyword,
-            title_keyword=args.course_keyword,
-            start_date=start_date,
-            end_date=end_date,
-            weekday=weekday,
-            quantum_id=args.quantum_id,
-            replay_only=not args.include_non_replay,
-            max_results=args.max_results,
-        )
+        if args.owned_only:
+            print("[BatchReplay] Scope: only courses accessible to the current account")
+            items, failures = _search_owned_replay_range(
+                client,
+                teacher_keyword=args.teacher_keyword,
+                title_keyword=args.course_keyword,
+                start_date=start_date,
+                end_date=end_date,
+                weekday=weekday,
+                replay_only=not args.include_non_replay,
+                max_results=args.max_results,
+            )
+        else:
+            items, failures = _search_replay_range(
+                client,
+                teacher_keyword=args.teacher_keyword,
+                title_keyword=args.course_keyword,
+                start_date=start_date,
+                end_date=end_date,
+                weekday=weekday,
+                quantum_id=args.quantum_id,
+                replay_only=not args.include_non_replay,
+                max_results=args.max_results,
+            )
         search_slug = _search_slug(
             teacher_keyword=args.teacher_keyword,
             title_keyword=args.course_keyword,
@@ -3425,6 +3890,13 @@ def cmd_batch_download_replays(args: argparse.Namespace) -> int:
             continue
 
         try:
+            base_name = _replay_output_base_name(
+                client=client,
+                course_id=course_id,
+                sub_id=sub_id,
+                title_hint=title,
+                date_hint=date_text,
+            )
             job_result = _run_replay_with_subtitles_job(
                 client=client,
                 username=username,
@@ -3450,6 +3922,7 @@ def cmd_batch_download_replays(args: argparse.Namespace) -> int:
                 retranslate=args.retranslate,
                 proofread_mode=args.proofread_mode,
                 proofread_model=args.proofread_model,
+                base_name=base_name,
             )
             result.update(job_result)
         except Exception as e:
@@ -3569,6 +4042,148 @@ def cmd_sync_subtitle(args: argparse.Namespace) -> int:
 
 
 def cmd_auto_potplayer(args: argparse.Namespace) -> int:
+    direct_media_url = _direct_media_url_from_lecture_url(args.lecture_url)
+    if direct_media_url:
+        try:
+            out_dir = _output_dir(args.output_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            base_name = _direct_output_base_name(args.output_dir)
+            video_path = out_dir / f"{base_name}.mp4"
+            raw_source_srt = out_dir / f"{base_name}.srt"
+            source_backup_srt = out_dir / f"{base_name}.zh.srt"
+            source_srt = raw_source_srt
+
+            print("[Auto] Step 1/4: download course video")
+            print("[Auto] Progress: 1/4")
+            video_path = _run_direct_video_download_job(
+                media_url=direct_media_url,
+                output_dir=args.output_dir,
+                timeout=args.video_timeout,
+                base_name=base_name,
+                tag="VideoDownload",
+            )
+
+            print("[Auto] Step 2/4: generate Chinese subtitles")
+            print("[Auto] Progress: 2/4")
+            if _file_ready(source_backup_srt, min_bytes=100):
+                shutil.copy2(source_backup_srt, source_srt)
+                print(f"[Auto] Reusing existing Chinese source subtitles: {source_backup_srt}")
+            else:
+                transcript_code = _run_transcript_local_video_job(
+                    username="",
+                    course_id=base_name,
+                    sub_id="direct",
+                    lecture_url=args.lecture_url,
+                    video_path=video_path,
+                    output_dir=args.output_dir,
+                    base_name=base_name,
+                    proofread_mode=args.proofread_mode,
+                    proofread_model=args.proofread_model,
+                    tag="Transcript",
+                )
+                if transcript_code != 0:
+                    return transcript_code
+                if _file_ready(raw_source_srt, min_bytes=100):
+                    shutil.copy2(raw_source_srt, source_backup_srt)
+                    print(f"[Auto] Saved Chinese source subtitles: {source_backup_srt}")
+
+            if not args.no_sync and _file_ready(source_srt, min_bytes=100) and _file_ready(video_path, min_bytes=1000):
+                print("[Auto] Step 2.5/4: align subtitle timing to audio")
+                try:
+                    synced_path, sync_report = _apply_subtitle_timing_sync(
+                        video_path=video_path,
+                        srt_path=source_srt,
+                        output_path=source_srt,
+                        max_local_shift_ms=args.sync_max_shift_ms,
+                        lead_ms=args.sync_lead_ms,
+                    )
+                    print(
+                        "[SubtitleSync] "
+                        f"adjusted={sync_report['changed']}/{sync_report['cues']} "
+                        f"global_shift_ms={sync_report['global_shift_ms']} "
+                        f"confidence={sync_report['global_confidence']}"
+                    )
+                    source_srt = synced_path
+                    shutil.copy2(source_srt, source_backup_srt)
+                except Exception as e:
+                    print(f"[SubtitleSync] Warning: sync skipped: {type(e).__name__}: {e}")
+
+            try:
+                txt_path = out_dir / f"{base_name}.txt"
+                used_proofread = _apply_subtitle_proofread(
+                    srt_path=source_srt,
+                    txt_path=txt_path if _file_ready(txt_path, min_bytes=1) else None,
+                    mode=args.proofread_mode,
+                    model=args.proofread_model,
+                    tag="Proofread",
+                )
+                print(f"[Auto] Subtitle proofread mode: {used_proofread}")
+                if _file_ready(source_srt, min_bytes=100):
+                    shutil.copy2(source_srt, source_backup_srt)
+            except Exception as e:
+                print(f"[Proofread] Warning: proofread skipped: {type(e).__name__}: {e}")
+
+            target = (args.target or "ru").strip()
+            if target.lower() in {"zh", "cn", "chinese", "中文", "简体中文"}:
+                final_srt = source_srt
+                print("[Auto] Step 3/4: keep Chinese subtitles")
+            else:
+                print("[Auto] Step 3/4: translate subtitles")
+                lang_suffix = _language_suffix(target)
+                expected_translation = out_dir / f"{source_srt.stem}.{lang_suffix}.srt"
+                if _file_ready(expected_translation, min_bytes=100):
+                    normalized_path, _bilingual, warnings = _normalize_manual_translation(
+                        source_srt_path=source_srt,
+                        translated_srt_path=expected_translation,
+                        target_language=target,
+                        output_path=str(expected_translation),
+                        bilingual=False,
+                    )
+                    translated_path = normalized_path
+                    print(f"[Auto] Reusing existing translated subtitles: {translated_path}")
+                    if warnings:
+                        print(f"[Auto] Normalized reused subtitles with {len(warnings)} timing warning(s).")
+                elif args.translation_mode == "free":
+                    translated_path, _ = _translate_srt_file_free(
+                        srt_path=source_srt,
+                        target_language=target,
+                        timeout=args.free_timeout,
+                        retries=args.free_retries,
+                        delay=args.free_delay,
+                        batch_size=args.free_batch_size,
+                        bilingual=False,
+                        output_dir=args.output_dir,
+                    )
+                else:
+                    translated_path, _ = _translate_srt_file(
+                        srt_path=source_srt,
+                        target_language=target,
+                        model=args.model,
+                        batch_size=args.batch_size,
+                        timeout=args.api_timeout,
+                        bilingual=False,
+                        output_dir=args.output_dir,
+                    )
+                final_srt = translated_path
+            print("[Auto] Progress: 3/4")
+
+            print("[Auto] Step 4/4: prepare PotPlayer files")
+            video_out, srt_out, readme = _prepare_player_files(
+                video_path=video_path,
+                srt_path=final_srt,
+                output_dir="",
+                copy_video=False,
+            )
+            print("[Auto] Done. PotPlayer files:")
+            print(f"  - video: {video_out}")
+            print(f"  - subtitle: {srt_out}")
+            print(f"  - readme: {readme}")
+            print("[Auto] Progress: 4/4")
+            return 0
+        except Exception as e:
+            _print_err(f"Auto processing failed: {type(e).__name__}: {e}")
+            return 1
+
     try:
         client, username = _ensure_authenticated_client(force_login=args.force_login)
     except Exception as e:
@@ -3586,11 +4201,12 @@ def cmd_auto_potplayer(args: argparse.Namespace) -> int:
     if not resolved:
         return 2
     course_id, sub_id = resolved
+    base_name = _replay_output_base_name(client=client, course_id=course_id, sub_id=sub_id)
     out_dir = _output_dir(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    video_path = out_dir / f"{course_id}_{sub_id}.mp4"
-    raw_source_srt = out_dir / f"{course_id}_{sub_id}.srt"
-    source_backup_srt = out_dir / f"{course_id}_{sub_id}.zh.srt"
+    video_path = out_dir / f"{base_name}.mp4"
+    raw_source_srt = out_dir / f"{base_name}.srt"
+    source_backup_srt = out_dir / f"{base_name}.zh.srt"
     source_srt = raw_source_srt
 
     print("[Auto] Step 1/4: download course video")
@@ -3603,6 +4219,7 @@ def cmd_auto_potplayer(args: argparse.Namespace) -> int:
         lecture_url=args.lecture_url,
         output_dir=args.output_dir,
         timeout=args.video_timeout,
+        base_name=base_name,
     )
     if video_code != 0:
         return video_code
@@ -3620,6 +4237,7 @@ def cmd_auto_potplayer(args: argparse.Namespace) -> int:
             lecture_url=args.lecture_url,
             video_path=video_path,
             output_dir=args.output_dir,
+            base_name=base_name,
             proofread_mode=args.proofread_mode,
             proofread_model=args.proofread_model,
             tag="Transcript",
@@ -3654,7 +4272,7 @@ def cmd_auto_potplayer(args: argparse.Namespace) -> int:
     try:
         used_proofread = _apply_subtitle_proofread(
             srt_path=source_srt,
-            txt_path=(out_dir / f"{course_id}_{sub_id}.txt") if _file_ready(out_dir / f"{course_id}_{sub_id}.txt", min_bytes=1) else None,
+            txt_path=(out_dir / f"{base_name}.txt") if _file_ready(out_dir / f"{base_name}.txt", min_bytes=1) else None,
             mode=args.proofread_mode,
             model=args.proofread_model,
             tag="Proofread",
@@ -3874,6 +4492,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional weekday filter. Use 1-7 or mon/tue/wed/... (1=Monday, 3=Wednesday)",
     )
     p_search_replay.add_argument("--quantum-id", type=int, default=0, help="Today Courses quantum_id parameter (default: 0)")
+    p_search_replay.add_argument(
+        "--owned-only",
+        action="store_true",
+        help="Search only within courses accessible to the current account instead of Today Courses",
+    )
     p_search_replay.add_argument("--output-dir", default="", help="Output directory (default: ./tongji-output)")
     p_search_replay.add_argument("--output-json", default="", help="Output JSON file path")
     p_search_replay.add_argument("--show-limit", type=int, default=30, help="Show at most N hits in terminal output")
@@ -3898,6 +4521,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional weekday filter. Use 1-7 or mon/tue/wed/... (1=Monday, 3=Wednesday)",
     )
     p_batch_replay.add_argument("--quantum-id", type=int, default=0, help="Today Courses quantum_id parameter (default: 0)")
+    p_batch_replay.add_argument(
+        "--owned-only",
+        action="store_true",
+        help="Search only within courses accessible to the current account instead of Today Courses",
+    )
     p_batch_replay.add_argument("--output-dir", default="", help="Output directory (default: ./tongji-output)")
     p_batch_replay.add_argument("--manifest", default="", help="Manifest JSON output path")
     p_batch_replay.add_argument("--target", default="zh", help="Subtitle language to keep or generate (default: zh)")
@@ -3915,7 +4543,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Translation mode when target is not Chinese: api or free",
     )
     p_batch_replay.add_argument("--free-timeout", type=int, default=25, help="Free translation request timeout seconds")
-    p_batch_replay.add_argument("--free-retries", type=int, default=2, help="Retry attempts per free translation request")
+    p_batch_replay.add_argument("--free-retries", type=int, default=3, help="Retry attempts per free translation request")
     p_batch_replay.add_argument("--free-delay", type=float, default=0.05, help="Delay seconds between free translation requests")
     p_batch_replay.add_argument("--free-batch-size", type=int, default=25, help="Subtitle cues per free translation request")
     p_batch_replay.add_argument("--video-timeout", type=int, default=7200, help="ffmpeg download timeout seconds")
@@ -3932,7 +4560,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_batch_replay.set_defaults(func=cmd_batch_download_replays)
 
     p_transcript = sub.add_parser("transcribe", aliases=["transcript", "trans"], help="Transcribe one lecture to SRT/TXT")
-    p_transcript.add_argument("--lecture-url", default="", help="Tongji lecture page URL (best-effort parsing)")
+    p_transcript.add_argument("--lecture-url", default="", help="Tongji replay page URL or an already-obtained direct media URL")
     p_transcript.add_argument("--course-id", default="", help="Course ID")
     p_transcript.add_argument("--sub-id", default="", help="Lecture sub_id")
     p_transcript.add_argument("--lecture-limit", type=int, default=20, help="Max lectures shown for interactive choice")
@@ -3942,7 +4570,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_transcript.set_defaults(func=cmd_transcript)
 
     p_video = sub.add_parser("download-video", aliases=["video", "dl-video"], help="Download one course replay video")
-    p_video.add_argument("--lecture-url", default="", help="Tongji lecture page URL (best-effort parsing)")
+    p_video.add_argument("--lecture-url", default="", help="Tongji replay page URL or an already-obtained direct media URL")
     p_video.add_argument("--course-id", default="", help="Course ID")
     p_video.add_argument("--sub-id", default="", help="Lecture sub_id")
     p_video.add_argument("--lecture-limit", type=int, default=20, help="Max lectures shown for interactive choice")
@@ -3952,7 +4580,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_video.set_defaults(func=cmd_download_video)
 
     p_slide = sub.add_parser("slide", help="Download lecture slide snapshots for one lecture")
-    p_slide.add_argument("--lecture-url", default="", help="Tongji lecture page URL (best-effort parsing)")
+    p_slide.add_argument("--lecture-url", default="", help="Tongji replay page URL or an already-obtained direct media URL")
     p_slide.add_argument("--course-id", default="", help="Course ID")
     p_slide.add_argument("--sub-id", default="", help="Lecture sub_id")
     p_slide.add_argument("--lecture-limit", type=int, default=20, help="Max lectures shown for interactive choice")
@@ -3987,7 +4615,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_slide_dedupe.set_defaults(func=cmd_slide_dedupe)
 
     p_note = sub.add_parser("note", help="Run transcript + slide in parallel for one lecture")
-    p_note.add_argument("--lecture-url", default="", help="Tongji lecture page URL (best-effort parsing)")
+    p_note.add_argument("--lecture-url", default="", help="Tongji replay page URL or an already-obtained direct media URL")
     p_note.add_argument("--course-id", default="", help="Course ID")
     p_note.add_argument("--sub-id", default="", help="Lecture sub_id")
     p_note.add_argument("--lecture-limit", type=int, default=20, help="Max lectures shown for interactive choice")
@@ -4015,7 +4643,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate translated subtitles from a lecture or an existing SRT",
     )
     p_subtitle.add_argument("--srt", default="", help="Existing SRT file to translate")
-    p_subtitle.add_argument("--lecture-url", default="", help="Tongji lecture page URL (best-effort parsing)")
+    p_subtitle.add_argument("--lecture-url", default="", help="Tongji replay page URL or an already-obtained direct media URL")
     p_subtitle.add_argument("--course-id", default="", help="Course ID")
     p_subtitle.add_argument("--sub-id", default="", help="Lecture sub_id")
     p_subtitle.add_argument("--lecture-limit", type=int, default=20, help="Max lectures shown for interactive choice")
@@ -4044,7 +4672,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Translate subtitles without API key using a free online translator with local cache",
     )
     p_free.add_argument("--srt", default="", help="Existing SRT file to translate")
-    p_free.add_argument("--lecture-url", default="", help="Tongji lecture page URL (best-effort parsing)")
+    p_free.add_argument("--lecture-url", default="", help="Tongji replay page URL or an already-obtained direct media URL")
     p_free.add_argument("--course-id", default="", help="Course ID")
     p_free.add_argument("--sub-id", default="", help="Lecture sub_id")
     p_free.add_argument("--lecture-limit", type=int, default=20, help="Max lectures shown for interactive choice")
@@ -4056,7 +4684,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_free.add_argument("--target", default="ru", help="Target subtitle language (default: ru)")
     p_free.add_argument("--timeout", type=int, default=25, help="Free translation request timeout seconds")
-    p_free.add_argument("--retries", type=int, default=2, help="Retry attempts per free translation request")
+    p_free.add_argument("--retries", type=int, default=3, help="Retry attempts per free translation request")
     p_free.add_argument("--delay", type=float, default=0.05, help="Delay seconds between free translation requests")
     p_free.add_argument("--batch-size", type=int, default=25, help="Subtitle cues per free translation request")
     p_free.add_argument("--no-bilingual", action="store_true", help="Only write target-language SRT")
@@ -4123,7 +4751,7 @@ def build_parser() -> argparse.ArgumentParser:
         aliases=["one-click", "auto"],
         help="Download video, generate subtitles, translate if needed, and prepare PotPlayer files",
     )
-    p_auto.add_argument("--lecture-url", default="", help="Tongji lecture page URL (best-effort parsing)")
+    p_auto.add_argument("--lecture-url", default="", help="Tongji replay page URL or an already-obtained direct media URL")
     p_auto.add_argument("--course-id", default="", help="Course ID")
     p_auto.add_argument("--sub-id", default="", help="Lecture sub_id")
     p_auto.add_argument("--lecture-limit", type=int, default=20, help="Max lectures shown for interactive choice")
@@ -4143,7 +4771,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Translation mode for non-Chinese targets: api or free",
     )
     p_auto.add_argument("--free-timeout", type=int, default=25, help="Free translation request timeout seconds")
-    p_auto.add_argument("--free-retries", type=int, default=2, help="Retry attempts per free translation request")
+    p_auto.add_argument("--free-retries", type=int, default=3, help="Retry attempts per free translation request")
     p_auto.add_argument("--free-delay", type=float, default=0.05, help="Delay seconds between free translation requests")
     p_auto.add_argument("--free-batch-size", type=int, default=25, help="Subtitle cues per free translation request")
     p_auto.add_argument("--video-timeout", type=int, default=7200, help="ffmpeg download timeout seconds")

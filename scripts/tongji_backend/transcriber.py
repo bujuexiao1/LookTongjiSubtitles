@@ -44,6 +44,19 @@ def _ffmpeg_bin() -> str:
     return shutil.which("ffmpeg") or "ffmpeg"
 
 
+def _hidden_subprocess_kwargs() -> dict:
+    if os.name != "nt":
+        return {}
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = 0
+    kwargs = {"startupinfo": startupinfo}
+    if creationflags:
+        kwargs["creationflags"] = creationflags
+    return kwargs
+
+
 class TranscriptionError(RuntimeError):
     """Raised when transcription fails after all retries."""
 
@@ -246,7 +259,11 @@ class Transcriber:
 
         try:
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=timeout,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                **_hidden_subprocess_kwargs(),
             )
         except subprocess.TimeoutExpired:
             raise TranscriptionError(f"Audio download timed out after {timeout}s")
@@ -364,7 +381,13 @@ class Transcriber:
         print(f"[Transcriber] Extracting audio from {input_path}...")
         t0 = time.time()
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            **_hidden_subprocess_kwargs(),
+        )
 
         elapsed = time.time() - t0
         if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:

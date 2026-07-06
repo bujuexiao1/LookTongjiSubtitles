@@ -40,17 +40,21 @@ PLAYWRIGHT_TRIM_PATHS = [
 
 README_TEXT = """Look 回放字幕工具（公开版）
 
-这个版本给正常公开使用准备，只处理你自己的 Tongji Look 账号本来就能访问的回放内容。
+这个版本用于处理 Tongji Look 回放，并生成可配合播放器使用的字幕文件。
 
-怎么用：
-1. 解压整个压缩包。
+使用方法：
+1. 解压整个文件夹。
 2. 双击 LookTongjiSubtitles.exe。
-3. 填写账号信息，或者直接粘贴回放页面链接。
-4. 按界面提示下载视频并生成字幕。
+3. 在主界面里二选一：
+   - 粘贴 Tongji 回放页面链接；
+   - 或粘贴你已经通过别的方法拿到的 MP4 长链接。
+4. 也可以在“批量回放”里按老师、课程名、日期范围搜索你账号权限内可访问的回放。
+5. 按界面提示下载视频并生成字幕。
 
 提醒：
+- 这个公开版可以处理你已经拿到的 MP4 直链，但不会替你抓取长链接。
+- 转录和添加字幕通常需要较长时间，建议在观看前提前准备。
 - 发送给别人时，请把整个文件夹一起发，不要只发 exe。
-- 这个公开版不带浏览器辅助抓取功能。
 - 使用时请遵守学校和平台规则。
 """
 
@@ -154,7 +158,7 @@ def write_readme(dist_app: Path, *, bundle_ffmpeg: bool, bundle_browser: bool) -
         "",
     ]
     readme = dist_app / "README.txt"
-    readme.write_text(README_TEXT + "\n".join(suffix), encoding="utf-8")
+    readme.write_text(README_TEXT + "\n".join(suffix), encoding="utf-8-sig")
 
 
 def create_release_zip(dist_app: Path) -> Path:

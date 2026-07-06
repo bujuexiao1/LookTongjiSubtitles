@@ -13,16 +13,17 @@ The source-code zip from `Code -> Download ZIP` is not the runnable package.
 ## What It Does
 
 - Sign in with your own Tongji account
-- Open replay links you can already access normally
+- Open Tongji replay page links you can already access normally
+- Process an MP4 direct URL that you already obtained elsewhere
 - Download the replay video
 - Generate subtitle files for the downloaded video
 - Save output in a layout that is easy to use with PotPlayer
 
 ## Scope
 
-This public build is only meant for replay content that your own account can already watch on Tongji Look.
+This public build can also process a direct MP4 URL if you already have one.
 
-It does not include any browser-assisted capture helper or permission-bypass workflow.
+It does not include any browser-assisted direct-link capture helper.
 
 ## Build From Source
 
