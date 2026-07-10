@@ -1,48 +1,44 @@
 # Tongji Look Subtitles
 
-这是一个用于 Tongji Look 回放视频下载和字幕生成的 Windows 桌面工具。
+同济课堂回放字幕工具。可以下载自己账号有权限访问的 Tongji Look 回放视频，并生成适合 PotPlayer 使用的 `.srt` 字幕。
 
 ## 下载即用版
 
-如果只是想直接使用 Windows 程序，请到 Releases 下载最新版 zip：
+只想直接使用的话，打开 Releases 下载最新版 Windows 压缩包：
 
 https://github.com/bujuexiao1/LookTongjiSubtitles/releases/latest
 
-解压整个文件夹后，双击 `LookTongjiSubtitlesV2.exe`。不要把 exe 单独移出文件夹。
+下载后解压整个文件夹，双击 `LookTongjiSubtitlesV2.exe` 启动。不要把 exe 单独拎出来运行，旁边的 `_internal`、`tools` 等文件夹都需要保留。
 
-## 功能
+## 使用前准备
 
-- 使用你自己的同济账号登录。
-- 搜索当前账号有权限访问的回放课程。
-- 下载课程回放视频。
-- 生成中文字幕 `.srt` 和转录文本。
-- 可选：通过 OpenAI 兼容 API 翻译字幕。
-- 自动整理成 PotPlayer 易用的同名 `.mp4` + `.srt`。
-- 自动把中间产物归档到 `中间产物` 文件夹，成品目录只保留视频和字幕。
-- V2 打包版使用双入口：
-  - `LookTongjiSubtitlesV2.exe`：给用户双击使用的图形界面。
-  - `LookTongjiSubtitlesV2CLI.exe`：给 GUI 调用的后台命令行 helper，用来稳定收集日志、进度和退出码。
+推荐使用 PotPlayer 播放生成后的视频和字幕：
 
-## 隐私说明
+https://potplayer.daum.net/
 
-仓库不包含账号密码、登录缓存、生成的视频/字幕、日志或本地设置。
+如果字幕文件和视频文件在同一个目录、文件名也一致，PotPlayer 一般会自动加载字幕。
 
-以下运行时文件不会提交到 Git：
+## 基本用法
 
-- `.env`
-- `state/`
-- `logs/`
-- `tongji-output/`
-- `build/`
-- `dist/`
+1. 打开 `LookTongjiSubtitlesV2.exe`。
+2. 在设置里填写同济账号信息，先点登录测试。
+3. 选择日期范围，也可以填写课程名或老师关键词。
+4. 搜索课程回放，勾选需要处理的视频。
+5. 点击开始处理，等待下载和字幕生成完成。
+6. 处理完成后，到输出目录查看 `.mp4` 和 `.srt` 文件。
 
-请只把账号、密码和 API Key 保存在你本机的 `.env` 或环境变量里，不要提交到仓库。
+成品目录会尽量保持清爽，主要保留视频和字幕。转写文本、健康检查、临时文件等会放到“中间产物”文件夹里。
 
-## 环境要求
+## 说明
 
-- Windows
-- Python 3.11 或更新版本
-- `pip`
+- 工具只会搜索和处理当前账号本来就有权限访问的课程。
+- 长视频生成字幕会比较慢，期间不要反复关闭程序。
+- 如果要翻译字幕，需要在设置里填写可用的 OpenAI 兼容 API 信息。
+- 下载和生成的课程内容请只用于个人学习，遵守学校和平台规则。
+
+## 从源码运行
+
+如果你想自己改代码或调试，可以使用源码版。
 
 安装依赖：
 
@@ -50,45 +46,26 @@ https://github.com/bujuexiao1/LookTongjiSubtitles/releases/latest
 pip install -r requirements.txt
 ```
 
-## 从源码运行
-
-公开版 GUI：
-
-```bash
-python scripts/look_tongji_gui_public.py
-```
-
-V2 GUI：
+运行 V2 图形界面：
 
 ```bash
 python scripts/look_tongji_gui_v2.py
 ```
 
-命令行：
+查看命令行帮助：
 
 ```bash
 python scripts/look_tongji.py --help
 ```
 
-## 打包 Windows 程序
-
-构建 V2 Windows 文件夹：
+## 打包 Windows 版
 
 ```bash
 python scripts/build_windows_app_v2.py
 ```
 
-构建结果会输出到 `dist/LookTongjiSubtitlesV2/`。
+打包结果会生成在 `dist/LookTongjiSubtitlesV2/`，发布时请打包整个文件夹，不要只发单个 exe。
 
-构建旧版公开 GUI：
+## 隐私
 
-```bash
-python scripts/build_windows_app.py
-```
-
-## 使用说明
-
-- 分享打包版时请发送整个构建文件夹，不要只发送单个 `.exe`。
-- 长视频生成字幕可能需要一段时间。
-- 请只处理当前账号有权限访问的课程回放。
-- 使用下载内容时请遵守学校和平台规则。
+仓库不包含账号、密码、登录缓存、生成的视频字幕、日志和本地设置。运行时产生的这些文件也已经加入 `.gitignore`，不要手动提交到仓库。
