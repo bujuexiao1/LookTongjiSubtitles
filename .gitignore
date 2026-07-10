@@ -4,10 +4,14 @@ venv/
 build/
 dist/
 state/
+logs/
 .trash/
 tongji-output/
+*.log
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 *.spec
+app_settings.json
+settings.json

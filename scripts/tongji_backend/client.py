@@ -7,6 +7,7 @@ authentication obtained via iam.tongji.edu.cn SSO.
 
 import hashlib
 import json
+import re
 import time
 import uuid
 from urllib.parse import urlparse
@@ -405,6 +406,39 @@ class TongjiClient:
             "raw": item,
         }
 
+    @staticmethod
+    def _extract_date_text(*values) -> str:
+        for value in values:
+            text = str(value or "").strip()
+            if not text:
+                continue
+            match = re.search(r"(\d{4})\D+(\d{1,2})\D+(\d{1,2})", text)
+            if match:
+                year, month, day = [int(part) for part in match.groups()]
+                return f"{year:04d}-{month:02d}-{day:02d}"
+        return ""
+
+    def _parse_lecture_item(self, item: dict) -> dict:
+        sub_title = item.get("sub_title", item.get("title", ""))
+        lecture_date = self._extract_date_text(
+            item.get("date"),
+            item.get("course_begin"),
+            item.get("begin_time"),
+            item.get("start_time"),
+            item.get("live_start_time"),
+            sub_title,
+        )
+        return {
+            "sub_id": item.get("id", item.get("sub_id", "")),
+            "sub_title": sub_title,
+            "lecturer_name": item.get("lecturer_name", ""),
+            "date": lecture_date,
+            "has_playback": (
+                str(item.get("playback_status", "")) == "1"
+                or bool(item.get("has_playback", False))
+            ),
+        }
+
     def get_ppt_snapshots(
         self,
         course_id: str,
@@ -477,29 +511,23 @@ class TongjiClient:
         # Handle nested date structure: {year: {month: {day: [items]}}}
         if isinstance(sub_list, dict):
             for year, months in sub_list.items():
+                if not isinstance(months, dict):
+                    continue
                 for month, days in months.items():
+                    if not isinstance(days, dict):
+                        continue
                     for day, items in days.items():
                         if isinstance(items, list):
                             for item in items:
                                 if isinstance(item, dict) and "id" in item:
-                                    lectures.append({
-                                        "sub_id": item["id"],
-                                        "sub_title": item.get("sub_title", ""),
-                                        "lecturer_name": item.get("lecturer_name", ""),
-                                        "date": f"{year}-{month}-{day}",
-                                        "has_playback": str(item.get("playback_status")) == "1",
-                                    })
+                                    lectures.append(
+                                        self._parse_lecture_item(item)
+                                    )
         # Handle flat list structure
         elif isinstance(sub_list, list):
             for item in sub_list:
                 if isinstance(item, dict) and "id" in item:
-                    lectures.append({
-                        "sub_id": item["id"],
-                        "sub_title": item.get("sub_title", ""),
-                        "lecturer_name": item.get("lecturer_name", ""),
-                        "date": item.get("date", ""),
-                        "has_playback": str(item.get("playback_status")) == "1",
-                    })
+                    lectures.append(self._parse_lecture_item(item))
 
         # Also check data.list or data.lectures
         if not lectures:
@@ -507,16 +535,7 @@ class TongjiClient:
             if isinstance(items, list):
                 for item in items:
                     if isinstance(item, dict):
-                        lectures.append({
-                            "sub_id": item.get("id", item.get("sub_id", "")),
-                            "sub_title": item.get("sub_title", item.get("title", "")),
-                            "lecturer_name": item.get("lecturer_name", ""),
-                            "date": item.get("date", ""),
-                            "has_playback": (
-                                str(item.get("playback_status", "")) == "1"
-                                or item.get("has_playback", False)
-                            ),
-                        })
+                        lectures.append(self._parse_lecture_item(item))
 
         return {"title": title, "teacher": teacher, "lectures": lectures}
 

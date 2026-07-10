@@ -174,7 +174,7 @@ class TongjiAuth:
         self._setup_bearer_auth()
         self.logged_in = True
         self._userinfo = None  # Reset cache
-        print(f"[Auth] Login successful! Token: {self.jwt_token[:30]}...")
+        print("[Auth] Login successful.")
         return True
 
     def _setup_bearer_auth(self):

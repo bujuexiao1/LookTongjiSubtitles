@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the public Windows app folder for Tongji Look subtitles."""
+"""Build the PySide6 GUI V2 Windows app folder for Tongji Look subtitles."""
 
 from __future__ import annotations
 
@@ -13,19 +13,32 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-BUILD_ROOT = PROJECT_ROOT / "build" / "windows_app"
+BUILD_ROOT = PROJECT_ROOT / "build" / "windows_app_v2"
 BROWSER_DIR = BUILD_ROOT / "ms-playwright"
 DIST_ROOT = PROJECT_ROOT / "dist"
 
-APP_NAME = "LookTongjiSubtitles"
-ENTRY_FILE = SCRIPT_DIR / "look_tongji_gui_public.py"
+APP_NAME = "LookTongjiSubtitlesV2"
+HELPER_NAME = "LookTongjiSubtitlesV2CLI"
+ENTRY_FILE = SCRIPT_DIR / "look_tongji_gui_v2.py"
+HELPER_ENTRY_FILE = SCRIPT_DIR / "look_tongji_cli_helper_v2.py"
 
-COMMON_HIDDEN_IMPORTS = [
+HIDDEN_IMPORTS = [
     "look_tongji",
     "tongji_backend.auth",
     "tongji_backend.client",
     "tongji_backend.config",
     "tongji_backend.transcriber",
+]
+
+EXCLUDED_MODULES = [
+    "IPython",
+    "matplotlib",
+    "numpy",
+    "PIL",
+    "pandas",
+    "scipy",
+    "jedi",
+    "pygments",
 ]
 
 PLAYWRIGHT_TRIM_PATHS = [
@@ -38,29 +51,39 @@ PLAYWRIGHT_TRIM_PATHS = [
     Path("_internal/playwright/driver/package/lib/vite"),
 ]
 
-README_TEXT = """Look 回放字幕工具（公开版）
+README_TEXT = """Tongji Look Subtitles
 
-这个版本用于处理 Tongji Look 回放，并生成适合播放器使用的字幕文件。
+这是一个可以直接使用的 Windows 字幕工具。
 
 使用方法：
 1. 解压整个文件夹。
-2. 双击 LookTongjiSubtitles.exe。
-3. 在主界面里选择一种方式：
-   - 粘贴 Tongji Look 回放页链接
-   - 或者粘贴你已经拿到的 MP4 直链
-4. 也可以用“批量回放”按老师、课程名和日期范围搜索并处理回放。
-5. 按界面提示下载视频并生成字幕。
+2. 双击 LookTongjiSubtitlesV2.exe。
+3. 到“设置”填写同济账号、密码和输出目录。
+4. 如果只需要中文字幕，不用填写 API Key。
+5. 单个回放去“单个回放”，批量查课去“批量搜索”。
+6. 搜索结果左侧可以直接勾选要处理的回放。
+7. 完成后到“结果文件”打开视频和字幕。
+
+输出目录里主要保留 mp4 视频和 srt 字幕。
+其他中间文件会放进“中间产物”文件夹。
+
+播放器下载：
+推荐使用 PotPlayer 播放生成的视频和字幕。
+打开官网 https://potplayer.tv/ ，根据自己的 Windows 系统选择 64 位或 32 位版本下载。
+安装后用 PotPlayer 打开生成的 mp4 视频即可。视频和字幕文件名相同、放在同一个文件夹里时，一般会自动加载字幕。
 
 提醒：
-- 转录和生成字幕通常需要一些时间，建议提前处理。
-- 分享给别人时，请发送整个文件夹，不要只发 exe。
+- 不要只移动 exe，请保留整个文件夹结构。
+- 同一天同一门课可能会有多段回放，软件会显示“第 1/2 段”这类标记。
+- 生成字幕需要一些时间，长视频请耐心等待。
+- 如果 Windows 提示风险，点“更多信息”后选择“仍要运行”。
 - 使用时请遵守学校和平台规则。
 """
 
 
-def run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
+def run(cmd: list[str]) -> None:
     print("$ " + " ".join(f'"{item}"' if " " in item else item for item in cmd))
-    subprocess.run(cmd, cwd=str(cwd or PROJECT_ROOT), env=env, check=True)
+    subprocess.run(cmd, cwd=str(PROJECT_ROOT), check=True)
 
 
 def format_size(num_bytes: int) -> str:
@@ -90,13 +113,16 @@ def ensure_pyinstaller() -> None:
 def ensure_playwright_browser() -> None:
     env = os.environ.copy()
     env["PLAYWRIGHT_BROWSERS_PATH"] = str(BROWSER_DIR)
-    run([sys.executable, "-m", "playwright", "install", "chromium"], env=env)
+    print("$ " + " ".join([sys.executable, "-m", "playwright", "install", "chromium"]))
+    subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        check=True,
+    )
 
 
-def copy_ffmpeg(dist_app: Path, *, bundle_ffmpeg: bool) -> None:
-    if not bundle_ffmpeg:
-        print("[OK] Skipping bundled ffmpeg. End users need ffmpeg on PATH.")
-        return
+def copy_ffmpeg(dist_app: Path) -> None:
     target = dist_app / "tools" / "ffmpeg" / "bin"
     target.mkdir(parents=True, exist_ok=True)
     ffmpeg = shutil.which("ffmpeg")
@@ -149,81 +175,75 @@ def trim_distribution(dist_app: Path) -> None:
 def write_readme(dist_app: Path, *, bundle_ffmpeg: bool, bundle_browser: bool) -> None:
     suffix = [
         "",
-        "Package Info: Public build",
-        f"ffmpeg: {'bundled' if bundle_ffmpeg else 'not bundled; user needs local ffmpeg'}",
+        f"ffmpeg: {'bundled' if bundle_ffmpeg else 'not bundled'}",
         f"browser: {'bundled Playwright Chromium' if bundle_browser else 'use local Edge/Chrome'}",
         "",
-        "Send the whole folder to users, not only the exe.",
+        "分享给别人时，请发送整个文件夹。",
         "",
     ]
-    readme = dist_app / "README.txt"
-    readme.write_text(README_TEXT + "\n".join(suffix), encoding="utf-8-sig")
+    (dist_app / "README.txt").write_text(README_TEXT + "\n".join(suffix), encoding="utf-8-sig")
 
 
-def create_release_zip(dist_app: Path) -> Path:
-    archive_base = DIST_ROOT / dist_app.name
-    archive_path = archive_base.with_suffix(".zip")
-    if archive_path.exists():
-        archive_path.unlink()
-    created = shutil.make_archive(str(archive_base), "zip", root_dir=dist_app.parent, base_dir=dist_app.name)
-    result = Path(created)
-    print(f"[OK] Created zip archive: {result} ({format_size(result.stat().st_size)})")
-    return result
-
-
-def build_public(*, bundle_browser: bool, bundle_ffmpeg: bool, make_zip: bool) -> list[Path]:
-    dist_app = DIST_ROOT / APP_NAME
-    if dist_app.exists():
-        shutil.rmtree(dist_app)
-
+def _pyinstaller_cmd(*, name: str, console: bool, collect_playwright: bool) -> list[str]:
     cmd = [
         sys.executable,
         "-m",
         "PyInstaller",
         "--noconfirm",
         "--clean",
-        "--noconsole",
+        "--console" if console else "--noconsole",
         "--onedir",
         "--name",
-        APP_NAME,
+        name,
         "--paths",
         str(SCRIPT_DIR),
-        "--collect-all",
-        "playwright",
     ]
-    for hidden_import in COMMON_HIDDEN_IMPORTS:
+    if collect_playwright:
+        cmd += ["--collect-all", "playwright"]
+    for hidden_import in HIDDEN_IMPORTS:
         cmd += ["--hidden-import", hidden_import]
-    cmd += [
-        "--exclude-module",
-        "IPython",
-        "--exclude-module",
-        "matplotlib",
-        "--exclude-module",
-        "numpy",
-        "--exclude-module",
-        "PIL",
-        "--exclude-module",
-        "pandas",
-        "--exclude-module",
-        "scipy",
-        "--exclude-module",
-        "jedi",
-        "--exclude-module",
-        "pygments",
-        str(ENTRY_FILE),
-    ]
-    run(cmd, cwd=PROJECT_ROOT)
+    for module_name in EXCLUDED_MODULES:
+        cmd += ["--exclude-module", module_name]
+    return cmd
 
-    copy_ffmpeg(dist_app, bundle_ffmpeg=bundle_ffmpeg)
+
+def merge_helper_dist(dist_app: Path, dist_helper: Path) -> None:
+    if not dist_helper.exists():
+        raise FileNotFoundError(f"Helper build output not found: {dist_helper}")
+    helper_exe = dist_helper / f"{HELPER_NAME}.exe"
+    if not helper_exe.exists():
+        raise FileNotFoundError(f"Helper exe not found: {helper_exe}")
+    shutil.copy2(helper_exe, dist_app / helper_exe.name)
+    helper_internal = dist_helper / "_internal"
+    app_internal = dist_app / "_internal"
+    if helper_internal.exists():
+        shutil.copytree(helper_internal, app_internal, dirs_exist_ok=True)
+    print(f"[OK] Merged CLI helper into app folder: {dist_app / helper_exe.name}")
+
+
+def build_v2(*, bundle_browser: bool, bundle_ffmpeg: bool) -> Path:
+    dist_app = DIST_ROOT / APP_NAME
+    dist_helper = DIST_ROOT / HELPER_NAME
+    if dist_app.exists():
+        shutil.rmtree(dist_app)
+    if dist_helper.exists():
+        shutil.rmtree(dist_helper)
+    gui_cmd = _pyinstaller_cmd(name=APP_NAME, console=False, collect_playwright=True)
+    gui_cmd.append(str(ENTRY_FILE))
+    run(gui_cmd)
+    helper_cmd = _pyinstaller_cmd(name=HELPER_NAME, console=True, collect_playwright=False)
+    helper_cmd.append(str(HELPER_ENTRY_FILE))
+    run(helper_cmd)
+    merge_helper_dist(dist_app, dist_helper)
+    if bundle_ffmpeg:
+        copy_ffmpeg(dist_app)
+    else:
+        print("[OK] Skipping bundled ffmpeg. End users need ffmpeg on PATH.")
     if bundle_browser:
         copy_playwright_browser(dist_app)
     trim_distribution(dist_app)
     write_readme(dist_app, bundle_ffmpeg=bundle_ffmpeg, bundle_browser=bundle_browser)
-
-    outputs: list[Path] = [dist_app]
-    if make_zip:
-        outputs.append(create_release_zip(dist_app))
-    return outputs
+    return dist_app
 
 
 def main() -> int:
@@ -238,26 +258,12 @@ def main() -> int:
         action="store_true",
         help="Do not bundle ffmpeg. Smaller, but users need ffmpeg on PATH.",
     )
-    parser.add_argument(
-        "--no-zip",
-        action="store_true",
-        help="Do not create a zip archive after build.",
-    )
     args = parser.parse_args()
-
     ensure_pyinstaller()
     if args.bundle_browser:
         ensure_playwright_browser()
-
-    outputs = build_public(
-        bundle_browser=args.bundle_browser,
-        bundle_ffmpeg=not args.no_ffmpeg,
-        make_zip=not args.no_zip,
-    )
-    print("\nDone:")
-    for item in outputs:
-        print(f"  - {item}")
-    print("Send the whole folder to users, not only the exe.")
+    dist_app = build_v2(bundle_browser=args.bundle_browser, bundle_ffmpeg=not args.no_ffmpeg)
+    print(f"Built V2 app at: {dist_app}")
     return 0
 
 

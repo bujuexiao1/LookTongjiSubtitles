@@ -2,3 +2,4 @@ requests
 playwright
 python-dotenv
 Pillow
+PySide6

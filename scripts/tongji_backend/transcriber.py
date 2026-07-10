@@ -262,6 +262,8 @@ class Transcriber:
                 cmd,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
                 **_hidden_subprocess_kwargs(),
             )
@@ -385,6 +387,8 @@ class Transcriber:
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             **_hidden_subprocess_kwargs(),
         )

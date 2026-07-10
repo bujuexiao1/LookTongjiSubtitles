@@ -7,12 +7,29 @@ the CLI-only skill. It loads environment variables from the skill root `.env`.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 # Skill root: <skill>/scripts/tongji_backend/config.py -> parents[2] == <skill>/
-_SKILL_ROOT = Path(__file__).resolve().parents[2]
+try:
+    _PACKAGED = Path(sys.argv[0]).suffix.lower() == ".exe"
+except Exception:
+    _PACKAGED = getattr(sys, "frozen", False)
+
+if _PACKAGED:
+    _candidates: list[Path] = []
+    for raw in (sys.argv[0] if sys.argv else "", sys.executable):
+        if not raw:
+            continue
+        try:
+            _candidates.append(Path(raw).resolve().parent)
+        except Exception:
+            continue
+    _SKILL_ROOT = _candidates[0] if _candidates else Path.cwd()
+else:
+    _SKILL_ROOT = Path(__file__).resolve().parents[2]
 _ENV_PATH = Path(os.environ.get("LOOK_TONGJI_ENV_PATH", str(_SKILL_ROOT / ".env")))
 if _ENV_PATH.is_file():
     load_dotenv(_ENV_PATH, override=False)

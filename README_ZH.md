@@ -1,42 +1,44 @@
-# 中文说明
+# Tongji Look Subtitles
 
-## 下载
+这是一个用于 Tongji Look 回放视频下载和字幕生成的 Windows 桌面工具。
 
-如果你只是想直接使用程序，请到 `Releases` 下载 `LookTongjiSubtitles.zip`。
+## 下载即用版
 
-解压之后，双击 `LookTongjiSubtitles.exe` 即可运行。
+如果只是想直接使用 Windows 程序，请到 Releases 下载最新版 zip：
 
-`Code -> Download ZIP` 下载到的是源码，不是可直接运行的成品包。
+https://github.com/bujuexiao1/LookTongjiSubtitles/releases/latest
 
-## 这个版本能做什么
+解压整个文件夹后，双击 `LookTongjiSubtitlesV2.exe`。不要把 exe 单独移出文件夹。
 
-- 使用你自己的 Tongji 账号登录
-- 处理你账号本来就能正常访问的 Tongji Look 回放页面
-- 也可以直接处理你已经通过其他方式获取到的 MP4 长链接
-- 下载视频
-- 生成字幕文件
-- 输出适合配合 PotPlayer 使用的同名 `mp4 + srt`
+## 功能
 
-## 使用方式
+- 使用你自己的同济账号登录。
+- 搜索当前账号有权限访问的回放课程。
+- 下载课程回放视频。
+- 生成中文字幕 `.srt` 和转录文本。
+- 可选：通过 OpenAI 兼容 API 翻译字幕。
+- 自动整理成 PotPlayer 易用的同名 `.mp4` + `.srt`。
+- 自动把中间产物归档到 `中间产物` 文件夹，成品目录只保留视频和字幕。
+- V2 打包版使用双入口：
+  - `LookTongjiSubtitlesV2.exe`：给用户双击使用的图形界面。
+  - `LookTongjiSubtitlesV2CLI.exe`：给 GUI 调用的后台命令行 helper，用来稳定收集日志、进度和退出码。
 
-1. 打开程序。
-2. 在主界面中粘贴 Tongji 回放页面链接，或者粘贴你已经拿到的 MP4 长链接。
-3. 选择字幕语言。
-4. 点击对应按钮开始下载和生成字幕。
-5. 完成后，到输出目录里用 PotPlayer 打开生成的视频即可。
+## 隐私说明
 
-也可以使用“批量回放”功能，按老师、课程名称和日期范围搜索你账号权限内可访问的回放，再批量下载和生成字幕。
+仓库不包含账号密码、登录缓存、生成的视频/字幕、日志或本地设置。
 
-## 说明
+以下运行时文件不会提交到 Git：
 
-- 这个公开版可以处理你已经拿到的 MP4 直链，但不会帮你抓取长链接。
-- 转录和添加字幕通常需要较长时间，建议在观看前提前准备。
-- 分享给别人时，请发送整个解压后的文件夹，不要只发送 `exe`。
-- 使用时请遵守学校和平台规则。
+- `.env`
+- `state/`
+- `logs/`
+- `tongji-output/`
+- `build/`
+- `dist/`
 
-## 从源码构建
+请只把账号、密码和 API Key 保存在你本机的 `.env` 或环境变量里，不要提交到仓库。
 
-需要：
+## 环境要求
 
 - Windows
 - Python 3.11 或更新版本
@@ -48,14 +50,45 @@
 pip install -r requirements.txt
 ```
 
-构建公开版 Windows 程序：
+## 从源码运行
+
+公开版 GUI：
+
+```bash
+python scripts/look_tongji_gui_public.py
+```
+
+V2 GUI：
+
+```bash
+python scripts/look_tongji_gui_v2.py
+```
+
+命令行：
+
+```bash
+python scripts/look_tongji.py --help
+```
+
+## 打包 Windows 程序
+
+构建 V2 Windows 文件夹：
+
+```bash
+python scripts/build_windows_app_v2.py
+```
+
+构建结果会输出到 `dist/LookTongjiSubtitlesV2/`。
+
+构建旧版公开 GUI：
 
 ```bash
 python scripts/build_windows_app.py
 ```
 
-直接运行源码版 GUI：
+## 使用说明
 
-```bash
-python scripts/look_tongji_gui_public.py
-```
+- 分享打包版时请发送整个构建文件夹，不要只发送单个 `.exe`。
+- 长视频生成字幕可能需要一段时间。
+- 请只处理当前账号有权限访问的课程回放。
+- 使用下载内容时请遵守学校和平台规则。

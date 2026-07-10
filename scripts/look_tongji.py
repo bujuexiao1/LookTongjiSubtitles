@@ -86,6 +86,20 @@ class SrtCue:
 
 
 def _skill_root() -> Path:
+    try:
+        packaged = Path(sys.argv[0]).suffix.lower() == ".exe"
+    except Exception:
+        packaged = getattr(sys, "frozen", False)
+    if packaged:
+        candidates: list[Path] = []
+        for raw in (sys.argv[0] if sys.argv else "", sys.executable):
+            if not raw:
+                continue
+            try:
+                candidates.append(Path(raw).resolve().parent)
+            except Exception:
+                continue
+        return candidates[0] if candidates else Path.cwd()
     return Path(__file__).resolve().parents[1]
 
 
@@ -1204,6 +1218,83 @@ def _write_subtitle_health_report(*, srt_path: Path, video_path: Path | None = N
     return report_path
 
 
+def _intermediate_dir(output_dir: Path) -> Path:
+    return output_dir / "中间产物"
+
+
+def _intermediate_path(path: Path) -> Path:
+    return _intermediate_dir(path.parent) / path.name
+
+
+def _intermediate_candidate_paths(path: Path) -> list[Path]:
+    candidates = [_intermediate_path(path)]
+    legacy_dir = path.parent / "涓棿浜х墿"
+    if legacy_dir != candidates[0].parent and legacy_dir.exists():
+        candidates.append(legacy_dir / path.name)
+    return candidates
+
+
+def _first_ready_file(*paths: Path, min_bytes: int = 1) -> Path | None:
+    for path in paths:
+        if _file_ready(path, min_bytes=min_bytes):
+            return path
+    return None
+
+
+def _archive_intermediate_outputs(output_dir: Path, *, keep_paths: list[Path]) -> list[Path]:
+    output_dir = output_dir.expanduser().resolve()
+    archive_dir = _intermediate_dir(output_dir)
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    keep_resolved = {path.expanduser().resolve() for path in keep_paths if path}
+    moved: list[Path] = []
+    intermediate_tails = (
+        ".json",
+        ".txt",
+        ".zh.srt",
+        ".source.srt",
+        ".normalized.srt",
+        ".bilingual.srt",
+        ".prompt.txt",
+        ".subtitle-health.txt",
+        ".video.json",
+    )
+    intermediate_names = {
+        "PotPlayer字幕使用说明.txt",
+        "PotPlayer瀛楀箷浣跨敤璇存槑.txt",
+        "v2_batch_search_results.json",
+        "v2_selected_replays.json",
+    }
+    for path in list(output_dir.iterdir()):
+        if not path.is_file():
+            continue
+        try:
+            resolved = path.resolve()
+        except Exception:
+            resolved = path
+        if resolved in keep_resolved:
+            continue
+        name = path.name
+        lower_name = name.lower()
+        should_archive = name in intermediate_names or lower_name.endswith(intermediate_tails)
+        if lower_name.endswith(".srt") and not should_archive:
+            should_archive = not path.with_suffix(".mp4").exists()
+        if not should_archive:
+            continue
+        target = archive_dir / name
+        if target.exists():
+            stem = target.stem
+            suffix_text = target.suffix
+            counter = 1
+            while target.exists():
+                target = archive_dir / f"{stem}.{counter}{suffix_text}"
+                counter += 1
+        shutil.move(str(path), str(target))
+        moved.append(target)
+    if moved:
+        print(f"[Archive] Moved {len(moved)} intermediate file(s) to: {archive_dir}")
+    return moved
+
+
 def _extract_mono_pcm_wav(video_path: Path, wav_path: Path, timeout: int = 900) -> None:
     cmd = [
         _ffmpeg_bin(),
@@ -2281,11 +2372,11 @@ def _move_to_trash(path: Path) -> None:
 def _parse_env_lines(raw: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for line in raw.splitlines():
-        line = line.strip()
+        line = line.lstrip("\ufeff").strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        key = key.strip()
+        key = key.strip().lstrip("\ufeff")
         value = value.strip()
         if value.startswith('"') and value.endswith('"') and len(value) >= 2:
             value = value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
@@ -2480,7 +2571,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         _print_err("No courses found.")
         return 1
 
-    print(f"[List] Logged in as: {username or '(unknown)'}")
+    print("[List] Login verified.")
 
     def _course_title(course: dict[str, Any]) -> str:
         return str(course.get("title") or course.get("course_title") or "").strip()
@@ -2652,7 +2743,7 @@ def _run_transcript_job(
     proofread_model: str = "",
     tag: str = "Transcript",
 ) -> int:
-    print(f"[{tag}] Logged in as: {username or '(unknown)'}")
+    print(f"[{tag}] Login verified.")
     print(f"[{tag}] course_id={course_id} sub_id={sub_id}")
     video_url = client.get_video_url(course_id, sub_id)
     if not video_url:
@@ -2730,7 +2821,7 @@ def _run_video_download_job(
     timeout: int,
     base_name: str | None = None,
 ) -> int:
-    print(f"[VideoDownload] Logged in as: {username or '(unknown)'}")
+    print("[VideoDownload] Login verified.")
     print(f"[VideoDownload] course_id={course_id} sub_id={sub_id}")
     video_url = client.get_video_url(course_id, sub_id)
     if not video_url:
@@ -2892,7 +2983,7 @@ def _run_transcript_local_video_job(
     proofread_model: str = "",
     tag: str = "Transcript",
 ) -> int:
-    print(f"[{tag}] Logged in as: {username or '(unknown)'}")
+    print(f"[{tag}] Login verified.")
     print(f"[{tag}] course_id={course_id} sub_id={sub_id}")
     print(f"[{tag}] Using local video for subtitle timing: {video_path}")
     if not video_path.exists() or video_path.stat().st_size == 0:
@@ -3029,9 +3120,14 @@ def _run_replay_with_subtitles_job(
     source_srt = raw_source_srt
     transcript_generated = False
 
-    if source_backup_srt.exists() and not retranscribe:
-        shutil.copy2(source_backup_srt, source_srt)
-        print(f"[BatchReplay] Reusing Chinese source subtitles: {source_backup_srt}")
+    reusable_source_srt = _first_ready_file(
+        source_backup_srt,
+        *_intermediate_candidate_paths(source_backup_srt),
+        min_bytes=100,
+    )
+    if reusable_source_srt and not retranscribe:
+        shutil.copy2(reusable_source_srt, source_srt)
+        print(f"[BatchReplay] Reusing Chinese source subtitles: {reusable_source_srt}")
     elif _file_ready(raw_source_srt, min_bytes=100) and _file_ready(txt_path, min_bytes=20) and not retranscribe:
         print(f"[BatchReplay] Reusing transcript artifacts: {raw_source_srt}")
         if not source_backup_srt.exists():
@@ -3130,7 +3226,15 @@ def _run_replay_with_subtitles_job(
                 output_dir=output_dir,
             )
 
-    result["final_srt"] = str(final_srt)
+    video_out, srt_out, _readme = _prepare_player_files(
+        video_path=video_path,
+        srt_path=final_srt,
+        output_dir="",
+        copy_video=False,
+    )
+    _archive_intermediate_outputs(out_dir, keep_paths=[video_out, srt_out])
+    result["video_file"] = str(video_out)
+    result["final_srt"] = str(srt_out)
     result["ok"] = True
     return result
 
@@ -3193,7 +3297,7 @@ def _run_slide_job(
     dedupe_threshold: int,
     tag: str = "Slide",
 ) -> int:
-    print(f"[{tag}] Logged in as: {username or '(unknown)'}")
+    print(f"[{tag}] Login verified.")
     print(f"[{tag}] course_id={course_id} sub_id={sub_id}")
     try:
         snapshots = client.get_ppt_snapshots(
@@ -3703,7 +3807,7 @@ def cmd_search_replay_range(args: argparse.Namespace) -> int:
         _print_err(str(e))
         return 2
 
-    print(f"[SearchReplay] Logged in as: {username or '(unknown)'}")
+    print("[SearchReplay] Login verified.")
     print(
         "[SearchReplay] Query: "
         f"teacher={args.teacher_keyword or '*'} "
@@ -3740,11 +3844,13 @@ def cmd_search_replay_range(args: argparse.Namespace) -> int:
 
     out_dir = _output_dir(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    default_json_dir = _intermediate_dir(out_dir)
+    default_json_dir.mkdir(parents=True, exist_ok=True)
     output_path = (
         Path(args.output_json).expanduser().resolve()
         if args.output_json
         else (
-            out_dir
+            default_json_dir
             / f"{_search_slug(teacher_keyword=args.teacher_keyword, title_keyword=args.course_keyword, start_date=start_date, end_date=end_date, weekday=weekday)}_replays.json"
         )
     )
@@ -3801,7 +3907,7 @@ def cmd_batch_download_replays(args: argparse.Namespace) -> int:
             _print_err(str(e))
             return 2
 
-        print(f"[BatchReplay] Logged in as: {username or '(unknown)'}")
+        print("[BatchReplay] Login verified.")
         print(
             "[BatchReplay] Query: "
             f"teacher={args.teacher_keyword or '*'} "
@@ -3841,11 +3947,13 @@ def cmd_batch_download_replays(args: argparse.Namespace) -> int:
             end_date=end_date,
             weekday=weekday,
         )
-        hits_path = out_dir / f"{search_slug}_replays.json"
+        intermediate_dir = _intermediate_dir(out_dir)
+        intermediate_dir.mkdir(parents=True, exist_ok=True)
+        hits_path = intermediate_dir / f"{search_slug}_replays.json"
         hits_path.write_text(json.dumps(items, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"[BatchReplay] Search hits saved: {hits_path}")
         if failures:
-            failure_path = out_dir / f"{search_slug}_replays_failures.json"
+            failure_path = intermediate_dir / f"{search_slug}_replays_failures.json"
             failure_path.write_text(json.dumps(failures, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             print(f"[BatchReplay] Search failures saved: {failure_path}")
 
@@ -3940,8 +4048,9 @@ def cmd_batch_download_replays(args: argparse.Namespace) -> int:
     manifest_path = (
         Path(args.manifest).expanduser().resolve()
         if args.manifest
-        else out_dir / f"{search_slug or 'batch_replays'}_batch_manifest.json"
+        else _intermediate_dir(out_dir) / f"{search_slug or 'batch_replays'}_batch_manifest.json"
     )
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     ok_count = sum(1 for item in manifest if item.get("ok"))
     print(f"[BatchReplay] Done: {ok_count}/{len(manifest)} succeeded")
@@ -4013,6 +4122,7 @@ def cmd_player_pack(args: argparse.Namespace) -> int:
     print(f"  - video: {video_out}")
     print(f"  - subtitle: {srt_out}")
     print(f"  - readme: {readme}")
+    _archive_intermediate_outputs(video_out.parent, keep_paths=[video_out, srt_out])
     print("[PlayerPack] Progress: 100/100")
     return 0
 
@@ -4065,9 +4175,14 @@ def cmd_auto_potplayer(args: argparse.Namespace) -> int:
 
             print("[Auto] Step 2/4: generate Chinese subtitles")
             print("[Auto] Progress: 2/4")
-            if _file_ready(source_backup_srt, min_bytes=100):
-                shutil.copy2(source_backup_srt, source_srt)
-                print(f"[Auto] Reusing existing Chinese source subtitles: {source_backup_srt}")
+            reusable_source_srt = _first_ready_file(
+                source_backup_srt,
+                *_intermediate_candidate_paths(source_backup_srt),
+                min_bytes=100,
+            )
+            if reusable_source_srt:
+                shutil.copy2(reusable_source_srt, source_srt)
+                print(f"[Auto] Reusing existing Chinese source subtitles: {reusable_source_srt}")
             else:
                 transcript_code = _run_transcript_local_video_job(
                     username="",
@@ -4178,6 +4293,7 @@ def cmd_auto_potplayer(args: argparse.Namespace) -> int:
             print(f"  - video: {video_out}")
             print(f"  - subtitle: {srt_out}")
             print(f"  - readme: {readme}")
+            _archive_intermediate_outputs(out_dir, keep_paths=[video_out, srt_out])
             print("[Auto] Progress: 4/4")
             return 0
         except Exception as e:
@@ -4226,9 +4342,14 @@ def cmd_auto_potplayer(args: argparse.Namespace) -> int:
 
     print("[Auto] Step 2/4: generate Chinese subtitles")
     print("[Auto] Progress: 2/4")
-    if _file_ready(source_backup_srt, min_bytes=100):
-        shutil.copy2(source_backup_srt, source_srt)
-        print(f"[Auto] Reusing existing Chinese source subtitles: {source_backup_srt}")
+    reusable_source_srt = _first_ready_file(
+        source_backup_srt,
+        *_intermediate_candidate_paths(source_backup_srt),
+        min_bytes=100,
+    )
+    if reusable_source_srt:
+        shutil.copy2(reusable_source_srt, source_srt)
+        print(f"[Auto] Reusing existing Chinese source subtitles: {reusable_source_srt}")
     else:
         transcript_code = _run_transcript_local_video_job(
             username=username,
@@ -4338,6 +4459,7 @@ def cmd_auto_potplayer(args: argparse.Namespace) -> int:
     print(f"  - video: {video_out}")
     print(f"  - subtitle: {srt_out}")
     print(f"  - readme: {readme}")
+    _archive_intermediate_outputs(out_dir, keep_paths=[video_out, srt_out])
     print("[Auto] Progress: 4/4")
     return 0
 

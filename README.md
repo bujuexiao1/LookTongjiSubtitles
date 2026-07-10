@@ -1,33 +1,44 @@
 # Tongji Look Subtitles
 
-Windows subtitle tool for `look.tongji.edu.cn`.
+A Windows desktop tool for downloading accessible Tongji Look replay videos and generating PotPlayer-ready subtitle files.
 
-## Download
+## Download Ready-To-Use Version
 
-If you just want to use the program, open `Releases` and download `LookTongjiSubtitles.zip`.
+If you only want to use the Windows app, download the latest zip from:
 
-After extracting the zip, double-click `LookTongjiSubtitles.exe`.
+https://github.com/bujuexiao1/LookTongjiSubtitles/releases/latest
 
-The source-code zip from `Code -> Download ZIP` is not the runnable package.
+Unzip the whole folder and run `LookTongjiSubtitlesV2.exe`. Do not move the exe out of the folder.
 
-## What It Does
+## Features
 
-- Sign in with your own Tongji account
-- Open Tongji replay page links you can already access normally
-- Process an MP4 direct URL that you already obtained elsewhere
-- Download the replay video
-- Generate subtitle files for the downloaded video
-- Save output in a layout that is easy to use with PotPlayer
+- Sign in with your own Tongji account.
+- Search replay courses that your account can already access.
+- Download replay videos.
+- Generate Chinese `.srt` subtitles and transcript text.
+- Optionally translate subtitles through an OpenAI-compatible API.
+- Package the final output as same-name `.mp4` + `.srt` files for PotPlayer.
+- Archive intermediate files into `中间产物`, keeping the output folder clean.
+- V2 build uses two executables:
+  - `LookTongjiSubtitlesV2.exe`: graphical desktop app.
+  - `LookTongjiSubtitlesV2CLI.exe`: console helper used by the GUI for stable background tasks.
 
-## Scope
+## Privacy
 
-This public build can also process a direct MP4 URL if you already have one.
+This repository does not include credentials, login sessions, generated videos, generated subtitles, logs, or local settings.
 
-It does not include any browser-assisted direct-link capture helper.
+Runtime-only files are ignored by Git:
 
-## Build From Source
+- `.env`
+- `state/`
+- `logs/`
+- `tongji-output/`
+- `build/`
+- `dist/`
 
-Requirements:
+Store credentials only in your local `.env` file or environment variables. Do not commit them.
+
+## Requirements
 
 - Windows
 - Python 3.11 or newer
@@ -39,20 +50,45 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Build the public Windows app:
+## Run From Source
 
-```bash
-python scripts/build_windows_app.py
-```
-
-Run the source GUI directly:
+Public GUI:
 
 ```bash
 python scripts/look_tongji_gui_public.py
 ```
 
-## Notes
+V2 GUI:
 
-- Please send the whole extracted folder if you share it with someone else.
-- Do not send only the `exe`.
-- Please follow school and platform rules when using this project.
+```bash
+python scripts/look_tongji_gui_v2.py
+```
+
+CLI:
+
+```bash
+python scripts/look_tongji.py --help
+```
+
+## Build Windows App
+
+Build the V2 Windows folder:
+
+```bash
+python scripts/build_windows_app_v2.py
+```
+
+The built app folder will be created under `dist/LookTongjiSubtitlesV2/`.
+
+Build the older public app:
+
+```bash
+python scripts/build_windows_app.py
+```
+
+## Usage Notes
+
+- Send the whole built folder when sharing a packaged app. Do not send only the `.exe`.
+- Subtitle generation can take a while for long lectures.
+- Use this tool only for replays that your account is allowed to access.
+- Follow your school and platform rules when using downloaded materials.
